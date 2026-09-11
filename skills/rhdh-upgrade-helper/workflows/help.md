@@ -10,7 +10,7 @@ Explain the rhdh-upgrade-helper skill to the user. No data sources needed.
 
 1. **Scans for secrets** — checks config files for embedded API keys, passwords, and tokens before processing
 2. **Analyzes your environment** — reads your config files or asks about your setup to understand your plugins, auth providers, SCM, and features
-3. **Resolves OCI references** — looks up each plugin in your config against the overlay repo workspace metadata to determine if local-path references need OCI migration
+3. **Resolves OCI references** — looks up each plugin in your config against the shipped catalog-index metadata to determine if local-path references need OCI migration, with overlay Git fallback
 4. **Validates existing OCI plugins** — checks that your `oci://` references are still valid and up-to-date for the target release
 5. **Checks release notes** — reads bundled release notes (1.4–1.10) for breaking changes, deprecated features, removed features, and known issues
 6. **Searches for known bugs** — queries RHDHBUGS Jira per-plugin for open bugs affecting your specific plugin versions, plus GitHub Issues for community-reported upgrade issues
@@ -143,12 +143,13 @@ For **rhdh-local**, just point `--config-path` at the rhdh-local directory — e
 
 | Dependency | Required | Purpose | If unavailable |
 |------------|----------|---------|----------------|
-| `git` | Yes | Shallow clone of overlay repo for plugin metadata | Falls back to `gh api` calls (slower, rate-limited) |
-| `gh` CLI (authenticated) | Recommended | GitHub Issues search, fallback for overlay repo | Bug search skipped; overlay repo needs `git` |
+| `oc`, `podman`, or `docker` | Recommended | Extracts the shipped catalog-index image, including productized metadata and documentation (`oc image extract` does not require a local container runtime) | Falls back to the next available tool, then Git |
+| `git` | Fallback | Shallow clone of the overlay repo for reduced-fidelity plugin metadata | Product context is limited to overlay files; report labels it as fallback evidence |
+| `gh` CLI (authenticated) | Recommended | GitHub Issues search | Bug search skipped if unavailable |
 | Atlassian MCP (Jira) | Optional | Per-plugin bug search against RHDHBUGS | Skipped silently — report uses release notes + GitHub Issues only |
 | `lynx` | Optional | Auto-fetch missing release notes | Notes the gap with a link to official docs |
 
-The skill degrades gracefully — each dependency adds depth to the report, but the core analysis (config parsing, OCI resolution from local clone, release notes, readiness scoring) works with just `git`.
+The skill degrades gracefully — the catalog-index image is preferred, but the core analysis can continue with the overlay Git fallback. If neither an image tool nor Git is available, plugin-support and OCI-migration conclusions are reported as unavailable rather than inferred.
 
 ### Bundled release notes
 

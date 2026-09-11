@@ -144,16 +144,18 @@ print(json.dumps(app_config, indent=2))
 
 For each plugin entry in the `plugins:` array, check:
 
-### 1. Bundle-to-OCI Migration (ALWAYS Critical)
+### 1. Resolve the Target Plugin Artifact
 
-Flag **every** `package:` value starting with `./dynamic-plugins/dist/` as **Critical**. No exceptions, no downgrades.
+Resolve the customer reference against the target Package entity index. The Package entity's `spec.dynamicArtifact` is the authoritative artifact reference. Do not replace it with an image reference copied from `index.json`.
 
-**Why this is always Critical — do NOT rationalize a downgrade:**
+Use the target support level as an artifact-policy signal, but always use the exact `spec.dynamicArtifact` value:
 
-- Local paths reference files pre-built inside the RHDH container image. The container image changes with every release.
-- `default.packages.yaml` lists NPM package names, NOT local filesystem paths. A package existing in `default.packages.yaml` does NOT mean `./dynamic-plugins/dist/package-name-dynamic` still exists inside the new container image.
-- When a local path doesn't exist, the plugin **silently disappears** — no error in logs, no init container failure, just missing functionality. This is the highest-impact silent failure mode.
-- The only way to verify whether a local path still exists is to inspect the target container image directly. Since we can't do that, **always treat local-path references as Critical**.
+- **Generally available + local `spec.dynamicArtifact`** → the plugin is intentionally bundled in the target image. Keep and use that local path. Do not substitute `index.json`'s `registryReference`.
+- **Generally available + `registry.access.redhat.com` OCI `spec.dynamicArtifact` with a matching active default OCI entry** → the Package entity remains authoritative, but RHDH 1.10 permits the deployment reference to replace its tag or digest with `:{{inherit}}`. Use the parser's `inheritArtifact` value so the tag is picked up from `dynamic-plugins.default.yaml`.
+- **Community + OCI `spec.dynamicArtifact`** → use the exact OCI reference from the Package entity, including its registry, tag, and optional plugin path. Do not substitute a `registry.access.redhat.com` image from `index.json`.
+- **Any support level with OCI `spec.dynamicArtifact`** → the plugin is OCI-backed for this release; use that exact OCI reference.
+- **Any support level with local `spec.dynamicArtifact`** → the target metadata declares the bundled local path. Compare it with the customer's path and preserve the customer's enablement or disablement intent.
+- **No matching Package entity** → the artifact is unresolved and requires Critical manual review; do not construct a replacement from `index.json`.
 
 ```bash
 # Find local-path plugin references with line numbers
@@ -161,80 +163,63 @@ grep -n './dynamic-plugins/dist/' "$CONFIG_PATH/dynamic-plugins.yaml" 2>/dev/nul
 grep -n './dynamic-plugins/dist/' "$CONFIG_PATH/values.yaml" 2>/dev/null
 ```
 
-**Recommended fix for each local-path reference:**
+**Recommended fix for each configured plugin reference:**
 
-1. **Best:** Remove the explicit entry entirely. If the plugin is in `dynamic-plugins.default.yaml` (loaded via `includes:`), it's already handled. The customer just needs to override `disabled: false` if the default is disabled.
-2. **Alternative:** Replace the `./dynamic-plugins/dist/` path with the OCI reference resolved from the overlay repo workspace metadata.
+Do not remove or convert an entry based only on the presence of an image record. First compare the customer's reference with the target Package entity's `spec.dynamicArtifact`, then compare its `disabled` value with the target default.
+
+1. **Target `spec.dynamicArtifact` matches the customer reference** → no artifact migration. If the target default preserves the intended state and no custom `pluginConfig` is required, the explicit entry may be removed; otherwise retain it.
+2. **Customer local path, target `spec.dynamicArtifact` is OCI** → Critical bundle-to-OCI migration; replace it with the exact target `spec.dynamicArtifact`.
+3. **Customer OCI/NPM reference, target `spec.dynamicArtifact` is local** → use the target local path when an artifact change is required; do not use `index.json`'s registry image.
+4. **Target default state differs from the customer's `disabled` intent** → preserve the explicit entry or migrate its artifact while retaining the customer's `disabled` value.
+5. **Target artifact is unresolved** → keep the finding Critical and require manual validation.
+
+When `inheritArtifact` is present, it is the preferred customer-facing replacement for a GA registry-access OCI artifact. It is an artifact-reference convenience, not a replacement for the Package entity: retain the exact `dynamicArtifact` as the evidence and fallback value. Do not emit `{{inherit}}` for Community/GHCR artifacts, local bundled artifacts, or registry-access artifacts without a matching default OCI package entry.
+
+Only an actual artifact transition or unresolved reference is Critical. A local path that exactly matches a target local `spec.dynamicArtifact` is not a bundle-to-OCI finding.
 
 #### Building the plugin metadata index
 
-Before resolving individual plugins, build a **metadata index** that maps every known `dynamicArtifact` path and image name to its metadata file. This handles all naming patterns (full names, `rhdh-bsp-*` abbreviations, `rhdh-backstage-plugin-*`, etc.) seamlessly.
+Before resolving individual plugins, build a **metadata index** from the complete `catalog-entities/extensions/packages/*.yaml` Package entity list when the shipped image was extracted, then enrich those records with productized image data from `index.json`. If the extractor used the overlay Git fallback, build the same index from the overlay metadata files. This index maps every plugin by multiple keys so any customer reference — local path, OCI reference, NPM package name, or image name — resolves in a single lookup.
 
-**Step 0 — Clone the overlay repo (run once per session):**
+**Step 0 — Build the index (run once per session, after resolving product data in `workflows/full-report.md` Step 2):**
 
-The overlay repo is cloned locally in `workflows/full-report.md` Step 2. All metadata lookups use the local clone at `/tmp/rhdh-overlays-{X.Y}/` — zero API calls, no rate limits, instant reads.
+Use `$PLUGIN_METADATA` from the catalog parser, or read every metadata file under `$PRODUCT_DATA_DIR/workspaces/*/metadata/*.yaml` when `$PRODUCT_DATA_SOURCE` is `overlay`, and build an in-memory index keyed by:
 
-```bash
-# Already cloned in Step 2:
-# /tmp/rhdh-overlays-{X.Y}/workspaces/*/metadata/*.yaml
-```
+1. **`spec.dynamicArtifact`** (exact value) — matches customer's `./dynamic-plugins/dist/...` or `oci://...` reference directly
+2. **`spec.packageName`** (NPM name, e.g., `@roadiehq/scaffolder-backend-module-http-request`) — matches exact NPM registry references and package entries
+3. **decoded dynamic-package names from `index.json`** — matches productized package names when the published NPM scope changed between releases; compare the package basename only after the image/package association is established
+4. **metadata filename** (without `.yaml` extension, e.g., `roadiehq-scaffolder-backend-module-http-request`) — matches image names derived from local paths
+5. **derived image name from `dynamicArtifact`** — for `oci://` artifacts, the image name between the last `/` and the `:` or `@`
 
-**Why a two-pass lookup is necessary:** The overlay repo uses multiple naming patterns for metadata files:
+Package entities are the complete package list and provide the authoritative `packageName`, `dynamicArtifact`, derived `artifactType` (`local`, `oci`, or `npm`), `version`, `support`, lifecycle, Backstage compatibility, and configuration examples. `index.json` is enrichment only: use `io.backstage.dynamic-packages` for alias/package association, `workspacePath` for workspace grouping, `imageTag` and `registryReference` for image provenance or digest audit, `support` only as a consistency check when a Package entity is absent, and build fields such as `build-date`, `vcs-ref`, `upstream`, and `midstream` for provenance. Never use `registryReference` to override or replace `spec.dynamicArtifact`.
 
-| Customer's local path contains | Metadata file might be named |
-|---|---|
-| `red-hat-developer-hub-backstage-plugin-extensions` | `rhdh-bsp-extensions.yaml` |
-| `red-hat-developer-hub-backstage-plugin-adoption-insights` | `rhdh-bsp-adoption-insights.yaml` |
-| `red-hat-developer-hub-backstage-plugin-orchestrator` | `rhdh-bsp-orchestrator.yaml` |
-| `backstage-plugin-catalog-backend-module-gitlab` | `backstage-plugin-catalog-backend-module-gitlab.yaml` |
-| `roadiehq-scaffolder-backend-module-http-request` | `roadiehq-scaffolder-backend-module-http-request.yaml` |
-| `rhdh-backstage-plugin-scorecard` | `rhdh-backstage-plugin-scorecard.yaml` |
+Each index entry stores the full metadata: `dynamicArtifact`, `packageName`, `version`, `support`, `lifecycle`, `appConfigExamples`, `artifactType`, `defaultDisabled`, `defaultPackageArtifact`, `inheritArtifact` when eligible, `referenceStatus` from the GA/Technology Preview/deprecated/supported-plugin references, and either the catalog record or fallback source file path.
 
-A filename-based lookup fails for abbreviated names. The `spec.dynamicArtifact` field is the only reliable key — it contains the exact `./dynamic-plugins/dist/` path or `oci://` reference that matches the customer's config.
+**Why a single-pass index works:** Every catalog-index record or overlay metadata file contains `spec.packageName` — the exact NPM package name (e.g., `@backstage-community/plugin-rbac`, `@roadiehq/scaffolder-backend-module-http-request`). This eliminates the need for filename-based guessing or content grepping across files. The index handles all naming patterns — `rhdh-bsp-*` abbreviations, full names, scoped NPM names — because it indexes by the actual field values, not by filename conventions.
 
-With the local clone, both passes are instant:
+#### Resolving plugins from customer config
 
-1. **Pass 1 (by filename):** `find /tmp/rhdh-overlays-{X.Y}/workspaces -name "{image-name}.yaml" -path "*/metadata/*"`
-2. **Pass 2 (by dynamicArtifact content):** `grep -rl "dynamicArtifact:.*{local-path}" /tmp/rhdh-overlays-{X.Y}/workspaces/*/metadata/`
+For each plugin entry in the customer's config, resolve it against the index:
 
-#### Resolving the OCI replacement from workspace metadata
+**Step 1 — Determine the lookup key from the customer's `package:` value:**
 
-For each `./dynamic-plugins/dist/` reference, look up the OCI replacement:
+| Customer's `package:` format | Lookup key | Index field |
+|---|---|---|
+| `./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-gitlab-dynamic` | The exact value | `spec.dynamicArtifact` |
+| `oci://ghcr.io/.../immobiliarelabs-backstage-plugin-gitlab:bs_1.49.4__7.0.1` | Extract image name: `immobiliarelabs-backstage-plugin-gitlab` | derived image name |
+| `https://npm.registry.redhat.com/@redhat/backstage-plugin-orchestrator-backend-dynamic/-/...1.8.9.tgz` | Extract NPM scope+name, then compare with associated decoded dynamic-package names | `spec.packageName` / `dynamicPackageNames` |
+| `@backstage-community/plugin-rbac` | The exact value | `spec.packageName` |
 
-**Step 1 — Derive the image name:**
+**Step 2 — Look up in index and read the result:**
 
-```
-./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-gitlab-dynamic
-  → strip "./dynamic-plugins/dist/" prefix
-  → strip "-dynamic" suffix (if present)
-  → "backstage-plugin-catalog-backend-module-gitlab"
-```
+- **If match found** → read `spec.dynamicArtifact`, `spec.version`, `spec.support`, `spec.packageName`, `spec.appConfigExamples`
+- **If no match** → the plugin is not available in the target release
 
-**Step 2 — Find the metadata file (two-pass lookup using local clone):**
+**Step 3 — Classify the finding:**
 
-**Pass 1 (by filename):**
-
-```bash
-find /tmp/rhdh-overlays-{X.Y}/workspaces -name "{image-name}.yaml" -path "*/metadata/*"
-```
-
-**Pass 2 (fallback — by dynamicArtifact content):** If Pass 1 finds no match, grep across all metadata files:
-
-```bash
-grep -rl "dynamicArtifact:.*{local-path}" /tmp/rhdh-overlays-{X.Y}/workspaces/*/metadata/
-```
-
-This finds the metadata file regardless of its filename — handles `rhdh-bsp-*`, `rhdh-backstage-plugin-*`, and any other naming pattern.
-
-**Step 3 — Read `spec.dynamicArtifact` from the matched metadata file:**
-
-```bash
-cat /tmp/rhdh-overlays-{X.Y}/workspaces/{workspace}/metadata/{matched-file}.yaml
-```
-
-- **If `oci://...`** → The plugin is **OCI-only** in the target release. The local path will fail. Use this `spec.dynamicArtifact` value directly as the replacement.
-- **If `./dynamic-plugins/dist/...`** → The plugin is **still bundled**. Flag as **Important** — recommend removing the explicit entry and relying on `dynamic-plugins.default.yaml` defaults. **Do NOT construct an OCI reference** that doesn't exist in metadata.
-- **If no metadata match found (both passes failed)** → The plugin is not available in the target release. Flag as **Critical** with "plugin removed from target release" message.
+- **If `spec.dynamicArtifact` is `oci://...`** → Use this exact value as the target artifact. If `inheritArtifact` is present for a GA registry-access image, use that `:{{inherit}}` form in the customer replacement so the shipped default supplies the tag. A Community/GHCR artifact always uses the exact Package entity reference; do not replace it with `registryReference`.
+- **If `spec.dynamicArtifact` is `./dynamic-plugins/dist/...`** → The plugin is still bundled. If the customer uses the same local path, there is no artifact migration. Compare `disabled` with `defaultDisabled` before recommending removal or retaining the override.
+- **If no match found in index** → The plugin is not available in the target release. Flag as **Critical** with "plugin removed from target release" message.
 
 **Step 4 — Produce migration findings:**
 
@@ -242,17 +227,17 @@ For each local-path plugin, create a migration issue with:
 
 - `file`: config file path
 - `line`: line number of the `package:` entry
-- `severity`: `critical` (if OCI-only or removed) or `important` (if still bundled)
-- `category`: `bundle-to-oci`
+- `severity`: `critical` only for an actual artifact transition or unresolved target reference; no migration issue for an exact target `dynamicArtifact` match
+   - `category`: `artifact-source` (use `bundle-to-oci` as a more specific label for local-to-OCI transitions if desired)
 - `current`: the `./dynamic-plugins/dist/...` value
-- `replacement`: the `spec.dynamicArtifact` OCI reference (if OCI-only), or "Remove explicit entry; plugin is available via `dynamic-plugins.default.yaml` defaults" (if still bundled)
-- `reason`: "OCI-only in target release — local path will fail" or "Still bundled, but recommend relying on defaults for forward compatibility"
+- `replacement`: the exact target `spec.dynamicArtifact` when it differs; otherwise no artifact replacement, with a conditional default/`disabled` action when relevant
+- `reason`: include both the local artifact-compatibility risk and whether removing the entry would change the customer's enabled/disabled state
 
-### 2. Validate Existing OCI References
+### 2. Validate Existing OCI and NPM References
 
-For every `oci://` reference in the customer's config, verify it is still valid for the target release:
+For every `oci://` or NPM registry reference in the customer's config, verify it against the target Package entity:
 
-**Step 1 — Extract the image name from the OCI reference:**
+**Step 1 — Extract the image or package name from the reference:**
 
 ```
 oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/immobiliarelabs-backstage-plugin-gitlab:bs_1.49.4__7.0.1
@@ -261,16 +246,14 @@ oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/immobiliarelabs-backs
 
 Strip the registry prefix and everything after the `:` tag or `@` digest.
 
-**Step 2 — Find the metadata (two-pass lookup using local clone):**
-
-Use the same two-pass approach as Section 1:
-
-1. **Pass 1:** `find /tmp/rhdh-overlays-{X.Y}/workspaces -name "{image-name}.yaml" -path "*/metadata/*"`
-2. **Pass 2:** `grep -rl "dynamicArtifact:.*{image-name}" /tmp/rhdh-overlays-{X.Y}/workspaces/*/metadata/`
+**Step 2 — Look up in the metadata index** (built in Section 1, Step 0) using the derived image name:
 
 **Step 3 — Compare:**
 
 - Check that the plugin still exists in workspace metadata for the target release. If not → flag as **Critical** ("plugin removed").
+- Compare the source type of the customer's reference with the source type of target `spec.dynamicArtifact`:
+  - local, OCI, or NPM → same source type: continue with version/reference comparison
+  - different source type: **Critical** artifact-source migration; use the exact target `spec.dynamicArtifact`
 - Compare the customer's OCI tag/digest with the `spec.dynamicArtifact` in metadata:
   - If the tag matches (same `bs_{version}__{plugin_version}`) → valid, no action needed.
   - If the tag is older (different backstage version or plugin version) → flag as **Important** with the updated reference from `spec.dynamicArtifact`.
@@ -283,7 +266,7 @@ For OCI references that need updating:
 - `file`: config file path
 - `line`: line number
 - `severity`: `critical` (removed) or `important` (outdated tag)
-- `category`: `oci-version-mismatch`
+- `category`: `oci-version-mismatch` for same-source version changes, or `artifact-source` for local/OCI/NPM source changes
 - `current`: the customer's OCI reference
 - `replacement`: the `spec.dynamicArtifact` from metadata
 - `reason`: "Plugin removed from target release" or "OCI reference targets older version; update to {version} for target release compatibility"
@@ -294,7 +277,7 @@ Check each configured plugin package name against the target release's `default.
 
 ### 4. Disabled Plugins Still Referenced
 
-Flag plugins with `disabled: true` that reference local paths — even disabled, they'll cause warnings if the path doesn't exist after upgrade.
+Flag a disabled plugin only when its target `spec.dynamicArtifact` differs from the customer reference or is unresolved. A disabled plugin whose local path exactly matches the target `dynamicArtifact` has no artifact migration finding; preserve its explicit disablement when the target default is enabled.
 
 ## Parsing App-Config
 
@@ -372,7 +355,7 @@ Capture as `$CONFIG_ANALYSIS`:
       "file": "values.yaml",
       "line": 36,
       "severity": "critical",
-      "category": "bundle-to-oci",
+      "category": "artifact-source",
       "current": "./dynamic-plugins/dist/roadiehq-scaffolder-backend-module-http-request-dynamic",
       "replacement": "oci://registry.access.redhat.com/rhdh/roadiehq-scaffolder-backend-module-http-request@sha256:2e498...",
       "reason": "Plugin is OCI-only in target release (spec.dynamicArtifact is an oci:// reference)"
@@ -381,10 +364,10 @@ Capture as `$CONFIG_ANALYSIS`:
       "file": "values.yaml",
       "line": 25,
       "severity": "important",
-      "category": "bundle-to-oci",
-      "current": "./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-gitlab-dynamic",
-      "replacement": "Remove explicit entry; plugin is available via dynamic-plugins.default.yaml defaults (override disabled: false if needed)",
-      "reason": "Still bundled, but recommend relying on defaults for forward compatibility"
+      "category": "artifact-source",
+      "current": "oci://registry.access.redhat.com/rhdh/backstage-community-plugin-argocd@sha256:abc",
+      "replacement": "oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-community-plugin-argocd:bs_1.49.4__2.8.0!backstage-community-plugin-argocd",
+      "reason": "The target Community Package entity declares this GHCR dynamicArtifact; do not use the index image registryReference as the replacement"
     },
     {
       "file": "values.yaml",
@@ -419,8 +402,9 @@ Capture as `$CONFIG_ANALYSIS`:
 
 | Finding | Severity | Downgrade allowed? |
 |---------|----------|--------------------|
-| Local-path plugin reference (`./dynamic-plugins/dist/`) | **Critical** — plugin silently disappears after upgrade | **NO.** Never downgrade to Important/Informational. The presence in `default.packages.yaml` does NOT confirm the local filesystem path exists in the target container image. |
+| Local path whose target `spec.dynamicArtifact` is OCI or unresolved | **Critical** — plugin may disappear or use an unavailable artifact | No |
+| Local path that exactly matches target `spec.dynamicArtifact` | No artifact finding; evaluate only default/`disabled` intent | N/A |
 | Plugin package not found in target release's package list | **Critical** — plugin may be removed or renamed | No |
 | Deprecated auth resolver name | **Critical** — login will fail after upgrade | No |
 | Deprecated config key | **Important** — may cause warnings or unexpected behavior | Yes, to Informational if the key is still functional |
-| Disabled plugin with local path | **Important** — won't cause runtime error but config is stale | Yes |
+| Disabled plugin whose target default is enabled | **Important** — removing the override would change the customer's intent | Yes |

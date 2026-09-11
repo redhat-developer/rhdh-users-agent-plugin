@@ -9,7 +9,7 @@ Start at 100 and subtract points for each finding category. The base score canno
 | Category | Max Deduction | How to Compute |
 |----------|---------------|----------------|
 | Breaking config keys | -25 | Count deprecated/removed config keys found in customer's `app-config.yaml`. 1-2 keys = -5, 3-5 = -10, 6-10 = -15, 11+ = -25. |
-| Bundle-to-OCI migrations | -25 | Count `./dynamic-plugins/dist/` local-path references in plugins config. 1-2 = -10, 3-5 = -15, 6+ = -25. |
+| Artifact-source migrations | -25 | Count configured plugin references whose source type (local, OCI, or NPM) differs from the target Package entity's `spec.dynamicArtifact`, plus unresolved references. Do not count a local path whose target `spec.dynamicArtifact` is the same bundled local path, or an OCI tag that only needs a version update. 1-2 = -10, 3-5 = -15, 6+ = -25. |
 | Backstage version jump | -15 | Minor versions between `--from` and `--to` Backstage versions. 0-1 = 0, 2-3 = -5, 4-5 = -10, 6+ = -15. |
 | Node.js version jump | -10 | Compare Node.js major versions. Same major = 0, +1 major = -5, +2 major = -10. |
 | Auth provider compatibility | -15 | Auth resolver changes between releases that affect the customer's configured providers. Each affected provider = -5, capped at -15. |
@@ -42,7 +42,7 @@ Mitigators add points back to the adjusted score. Each mitigator adds a flat bon
 |-----------|-------|---------|
 | Single-version upgrade | +10 | `--from` is the release immediately before `--to` (no skipped releases). |
 | All plugins exist in target | +10 | Every plugin in customer's config exists in the target release's `default.packages.yaml`. |
-| No bundle-to-OCI needed | +10 | Zero `./dynamic-plugins/dist/` references found. Already using OCI or no local-path plugins. |
+| No artifact-source migration needed | +10 | Zero configured plugins require a local/OCI/NPM source-type transition according to target `spec.dynamicArtifact`. A valid bundled local path does not prevent this mitigator. |
 
 **Formula:** `final = min(100, adjusted + sum(mitigator_bonuses))`
 
