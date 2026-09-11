@@ -76,24 +76,38 @@ Skip this confirmation only when the files came from a `.rhdh-upgrade-helper.yam
 - If `$ENVIRONMENT_PROFILE` was passed from `workflows/interactive.md`, use that instead of config files
 - If no config files and no environment profile, route to `workflows/interactive.md`
 
-## Step 2: Clone Overlay Repo and Resolve Release Versions
+## Step 2: Resolve Shipped Product Data
 
-Clone the overlay repo for the **target release only** into `/tmp` for fast local access. The source (FROM) release does not need the overlay repo — its Backstage/Node versions come from the bundled release notes (`references/release-notes/{from}.md`).
+Use the skill-local extractor to obtain the target release's shipped product data. It tries extraction in this order:
+
+1. `oc image extract` (works without a local container runtime)
+2. `podman`
+3. `docker`
+4. a shallow Git clone of the target `rhdh-plugin-export-overlays` branch
+
+The catalog-index image is the authoritative source because it is the productized artifact and includes the plugin metadata and product documentation shipped for the release. The Git clone is a reduced-fidelity fallback for environments without an image tool or registry access. Always record which source was used in `$PRODUCT_DATA_SOURCE` and `$PRODUCT_DATA_FIDELITY`.
 
 ```bash
-# Clone target release branch (shallow, ~1-2 seconds)
-git clone --depth 1 --branch release-{rhdh_to} \
-  https://github.com/redhat-developer/rhdh-plugin-export-overlays.git \
-  /tmp/rhdh-overlays-{rhdh_to} 2>/dev/null
+# SKILL_DIR is the installed rhdh-upgrade-helper directory.
+PRODUCT_DATA_DIR=$(bash "$SKILL_DIR/scripts/extract-catalog-index.sh" "{rhdh_to}")
+PRODUCT_DATA_ROOT=$(dirname "$PRODUCT_DATA_DIR")
+PRODUCT_DATA_INFO=$(python3 "$SKILL_DIR/scripts/parse-catalog-index.py" \
+  --data-root "$PRODUCT_DATA_ROOT" source "{rhdh_to}" --json)
+PRODUCT_DATA_SOURCE=$(printf '%s\n' "$PRODUCT_DATA_INFO" | python3 -c \
+  'import json, sys; print(json.load(sys.stdin)["source"])')
+PRODUCT_DATA_FIDELITY=$(printf '%s\n' "$PRODUCT_DATA_INFO" | python3 -c \
+  'import json, sys; print(json.load(sys.stdin)["fidelity"])')
+RELEASE_VERSIONS=$(python3 "$SKILL_DIR/scripts/parse-catalog-index.py" \
+  --data-root "$PRODUCT_DATA_ROOT" versions "{rhdh_to}" --json)
 ```
 
-If `git clone` fails (no network, branch doesn't exist), fall back to `gh api` calls for individual files.
+If extraction fails completely, report the product-data gap and do not silently make plugin-support or OCI-migration claims. The source (FROM) release does not need product-data extraction — its Backstage/Node versions come from the bundled release notes (`references/release-notes/{from}.md`).
 
 Read version info:
 
 ```bash
-# Target release (TO) — from local clone:
-cat /tmp/rhdh-overlays-{rhdh_to}/versions.json
+# Target release (TO) — from the extracted catalog data:
+echo "$RELEASE_VERSIONS"
 
 # Source release (FROM) — from bundled release notes:
 # e.g., references/release-notes/1.8.md says "upstream Backstage 1.42.5"
@@ -140,27 +154,29 @@ Map `features` to workspace list using the feature-to-workspace mapping in `refe
 
 ## Step 4: Gather Product Context (parallel with Step 3)
 
-Gather release metadata and breaking changes. The overlay repo local clone (`/tmp/rhdh-overlays-{rhdh_to}/`) provides target release data. Source release context comes from bundled release notes.
+Gather release metadata and breaking changes from `$PRODUCT_DATA_DIR`. Source release context comes from bundled release notes.
 
 ### 4a: Default packages for target release
 
-Read `default.packages.yaml` from the local clone to identify available plugins and their support levels:
+Read the defaults summary through the parser. When the catalog image is available, its `dynamic-plugins.default.yaml` is the shipped product default; the overlay fallback uses `default.packages.yaml` when present.
 
 ```bash
-cat /tmp/rhdh-overlays-{rhdh_to}/default.packages.yaml
+DEFAULT_PACKAGES=$(python3 "$SKILL_DIR/scripts/parse-catalog-index.py" \
+  --data-root "$PRODUCT_DATA_ROOT" defaults "{rhdh_to}" --json)
 ```
 
-Use this to check: which plugins in the customer's config exist in the target release, and at what support level.
+Use this to check which plugins in the customer's config exist in the target release and at what support level. If the source is the overlay fallback, label conclusions based on this data as fallback evidence.
 
 ### 4b: Per-plugin metadata diff
 
-For each workspace relevant to the customer's plugins, read metadata YAML from the local clone:
+Build the plugin metadata input once through the parser:
 
 ```bash
-cat /tmp/rhdh-overlays-{rhdh_to}/workspaces/{workspace}/metadata/{plugin}.yaml
+PLUGIN_METADATA=$(python3 "$SKILL_DIR/scripts/parse-catalog-index.py" \
+  --data-root "$PRODUCT_DATA_ROOT" plugins "{rhdh_to}" --json)
 ```
 
-Extract `spec.version`, `spec.support`, `spec.backstage.supportedVersions` from each.
+For catalog-index data, the Package entity is authoritative for `spec.packageName`, `spec.dynamicArtifact`, derived artifact type (`local`, `oci`, or `npm`), `spec.version`, `spec.support`, `spec.backstage.supportedVersions`, lifecycle, and configuration examples. `index.json` is enrichment only: use its dynamic-package annotation for association, workspace path for grouping, image tag and registry reference for provenance/digest audit, its support value only as a consistency check when a Package entity is absent, and build fields for provenance. Never use `index.json`'s `registryReference` as the plugin replacement when the Package entity has a `dynamicArtifact`. For GA registry-access OCI packages, use the parser's `inheritArtifact` when a matching active default OCI entry exists; for Community packages, retain the exact Package entity OCI reference. The `referenceStatus` field records evidence from the GA, Technology Preview, deprecated, and supported-plugin reference files.
 
 ### 4c: Release notes
 
@@ -196,44 +212,36 @@ Save the result to `references/release-notes/{version}.md` so future runs skip t
 
 4. **If lynx is not available or the fetch fails:** Note the gap in the report: "Release notes for RHDH {version} could not be fetched automatically. Install lynx (`brew install lynx` / `dnf install lynx` / `apt install lynx`) or manually add the file per `references/release-notes/README.md`. Check <https://docs.redhat.com/en/documentation/red_hat_developer_hub/{version}> for the official release notes."
 
-### 4d: Resolve local-path plugins and validate OCI references
+### 4d: Build plugin metadata index and resolve all plugin references
 
-Follow `references/config-analysis.md` Sections 1 and 2. This step covers ALL plugins in the customer's config — both local-path and OCI.
+Follow `references/config-analysis.md` Sections 1 and 2. This step covers ALL plugins in the customer's config — local-path, OCI, and NPM references.
 
-**Using the local clone for all lookups** (cloned in Step 2 at `/tmp/rhdh-overlays-{rhdh_to}/`):
+**Step 4d-i: Build the metadata index** (run once, using `$PLUGIN_METADATA` from Step 4b):
 
-**For each plugin in the customer's config**, use the two-pass lookup from `references/config-analysis.md`:
+Use the complete Package entity records under `catalog-entities/extensions/packages/` as the authoritative package list and artifact map, enriched with matching `index.json` image records and `extend_dynamic-plugins-reference` status records. Key records by exact `spec.dynamicArtifact`, `spec.packageName`, decoded dynamic-package names, metadata filename, and derived OCI image name. When `$PRODUCT_DATA_SOURCE` is `overlay`, build the same index by reading the fallback workspace metadata files. See `references/config-analysis.md` Section 1, Step 0 for the full index schema.
 
-1. **Pass 1 (fast — by filename):** Derive image name (strip `./dynamic-plugins/dist/` prefix + `-dynamic` suffix), search for the metadata file locally:
-
-   ```bash
-   find /tmp/rhdh-overlays-{rhdh_to}/workspaces -name "{image-name}.yaml" -path "*/metadata/*"
-   ```
-
-2. **Pass 2 (fallback — by dynamicArtifact content):** If Pass 1 fails, grep across all metadata files for the customer's path:
-
-   ```bash
-   grep -rl "dynamicArtifact:.*{local-path}" /tmp/rhdh-overlays-{rhdh_to}/workspaces/*/metadata/
-   ```
-
-   This handles `rhdh-bsp-*` abbreviations, `rhdh-backstage-plugin-scorecard-*`, and all other naming variants — instantly, with zero API calls.
+**Step 4d-ii: Resolve each plugin** against the index using the lookup key appropriate to the customer's `package:` format (local path, OCI reference, NPM URL, or NPM package name). See `references/config-analysis.md` Section 1, Steps 1-3 for key derivation rules.
 
 **For each `./dynamic-plugins/dist/` reference** (Section 1):
-
-1. Find matching metadata via two-pass lookup
-2. Read `spec.dynamicArtifact`:
-   - `oci://...` → **Critical**: plugin is OCI-only, use this value as replacement
-   - `./dynamic-plugins/dist/...` → **Important**: still bundled, recommend removing explicit entry and relying on `dynamic-plugins.default.yaml` defaults
-   - No match found → **Critical**: plugin removed from target release
+1. Look up by exact `dynamicArtifact` value in the index
+2. Read `spec.dynamicArtifact` from the matched entry:
+   - `oci://...` → use this exact target artifact; **Critical** if the customer has a different artifact source
+   - `./dynamic-plugins/dist/...` → keep the target local path; no bundle-to-OCI finding when it matches the customer reference
+   - No match found → **Critical**: target artifact unresolved
 3. **Do NOT construct OCI references.** Only use `spec.dynamicArtifact` from metadata.
 
 **For each `oci://` reference** (Section 2):
-
-1. Extract image name, find matching metadata via two-pass lookup
+1. Extract image name, look up in the index by derived image name
 2. Compare the customer's tag/digest with `spec.dynamicArtifact` in metadata:
    - Tag matches → valid, no action
-   - Tag is outdated → **Important**: provide updated reference from metadata
-   - No match found → **Critical**: plugin removed from target release
+   - Target `dynamicArtifact` is a different OCI reference → provide that exact reference; do not use `registryReference` as a substitute
+   - Target `dynamicArtifact` is local → use the target local path if an artifact change is required
+   - No match found → **Critical**: target artifact unresolved
+
+**For each NPM registry URL or package name:**
+1. Extract the NPM scope+name (e.g., `@redhat/backstage-plugin-orchestrator-backend-dynamic`)
+2. Look up by exact `spec.packageName`; if the published scope changed, use the associated `dynamicPackageNames` basename as the fallback association key
+3. If found, compare the customer's pinned version with `spec.version` and the customer's source type with `artifactType`; use the exact target `dynamicArtifact` for any source transition
 
 Capture as `$PLUGIN_METADATA` — merged into `$CONFIG_ANALYSIS.migration_issues` in Step 5.
 
@@ -322,7 +330,7 @@ Follow `references/config-scoring.md` exactly:
 
 1. Compute base score (100 minus deductions from config findings)
 2. Apply amplifiers (plugin removals, auth breaks, version jumps)
-3. Apply mitigators (single-version upgrade, all plugins exist, no bundle-to-OCI)
+3. Apply mitigators (single-version upgrade, all plugins exist, no artifact-source migration)
 4. Clamp to 0-100
 5. Map to readiness label
 

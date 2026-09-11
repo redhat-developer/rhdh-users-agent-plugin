@@ -30,7 +30,7 @@ This skill uses two data sources:
 
 1. **Your environment** — either parsed from config files (`--config-path`) or built from intake questions. Determines which plugins, auth providers, and features you use.
 
-2. **Product context** — release diffs, breaking changes, plugin version jumps, support level changes, bundle-to-OCI migrations. Gathered from the public `rhdh-plugin-export-overlays` overlay repo and RHDH release notes. Determines what changed between your current and target releases.
+2. **Product context** — release diffs, breaking changes, plugin version jumps, support level changes, bundle-to-OCI migrations. Gathered first from the shipped `plugin-catalog-index` image, which includes productized plugin metadata and documentation, with the public `rhdh-plugin-export-overlays` repo as a fallback, plus RHDH release notes. Determines what changed between your current and target releases.
 
 3. **Known bug data** — For each plugin in your config, the skill searches the RHDHBUGS Jira project for open bugs affecting that plugin in the target release. Also queries GitHub Issues on `redhat-developer/rhdh` for community-reported upgrade issues. If Jira is not accessible, falls back to GitHub Issues and release notes only.
 
@@ -106,8 +106,8 @@ Frame the output positively. "Readiness Score: 85/100 — Ready with minor prep"
 This skill is customer-facing. Avoid: "Customer Focal," "RHDHSUPP," "ticket history," "correlation rules," "churn hotspots." Use: "your configuration," "your plugins," "your auth setup."
 </pitfall>
 
-<pitfall name="downgrading-local-path-severity">
-**Never downgrade local-path (`./dynamic-plugins/dist/`) findings from Critical.** The `default.packages.yaml` lists NPM package names — it does NOT confirm that the local filesystem path `./dynamic-plugins/dist/plugin-name-dynamic` still exists inside the target container image. These are different things. A plugin can exist in the default packages as an OCI reference while the local path was removed from the container image. The only safe path is to flag every `./dynamic-plugins/dist/` reference as Critical and recommend removal or OCI migration. See `references/config-analysis.md` Section 1.
+<pitfall name="using-index-image-as-plugin-artifact">
+**Use the Package entity's `spec.dynamicArtifact` as the artifact source of truth.** A generally available plugin may intentionally remain bundled at a local path, so do not replace it with the `registryReference` from `index.json`. A community plugin may intentionally use a GHCR tag in `spec.dynamicArtifact`, so use that exact reference instead of a registry-access image from `index.json`. For a GA `registry.access.redhat.com` artifact with a matching default OCI entry, recommend the 1.10 `:{{inherit}}` form so the default dynamic-plugin tag is inherited. The index image data is enrichment and lookup evidence, not a replacement for `spec.dynamicArtifact`. See `references/config-analysis.md` Section 1.
 </pitfall>
 
 <pitfall name="processing-secrets">
@@ -119,7 +119,7 @@ Always recommend RHDH Local for safe pre-upgrade testing. If the customer's work
 </pitfall>
 
 <pitfall name="findings-without-evidence">
-**Never flag a finding as Critical or Important without concrete evidence from the RHDH release notes (`references/release-notes/*.md`), overlay repo workspace metadata, or Backstage changelogs.** Do not infer deprecation or breakage from naming conventions alone (e.g., "legacy" does not mean deprecated). Every Critical or Important finding must trace to a specific release notes entry or metadata change. If no evidence exists, either omit the finding or note it as Informational with an explicit caveat.
+**Never flag a finding as Critical or Important without concrete evidence from the RHDH release notes (`references/release-notes/*.md`), the shipped catalog-index metadata (or explicitly labeled overlay fallback), or Backstage changelogs.** Do not infer deprecation or breakage from naming conventions alone (e.g., "legacy" does not mean deprecated). Every Critical or Important finding must trace to a specific release notes entry or metadata change. If no evidence exists, either omit the finding or note it as Informational with an explicit caveat.
 </pitfall>
 </anti_patterns>
 
@@ -127,7 +127,7 @@ Always recommend RHDH Local for safe pre-upgrade testing. If the customer's work
 The report is complete when:
 
 - All config files scanned for secrets per `references/secrets-detection.md` before any analysis
-- Target release resolved to Backstage version via overlay repo
+- Target release resolved to Backstage version via the shipped catalog-index image or explicitly labeled overlay fallback
 - Customer's environment determined (from config or intake questions)
 - Product context gathered for the release range
 - Per-plugin bug search run against RHDHBUGS Jira (if accessible) and `redhat-developer/rhdh` GitHub Issues

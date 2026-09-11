@@ -20,9 +20,17 @@ Quick start: `npx skills add redhat-developer/rhdh-users-skill-pack`. The instal
 
 Analyzes your RHDH configuration against a target release and produces a personalized migration plan. The report shows what affects your setup and what does not. The skill works with Helm, Operator, and rhdh-local deployments.
 
+**What it does:**
+- Resolves OCI references for every plugin via the shipped catalog-index image, with overlay repo metadata as a fallback
+- Validates existing OCI plugin tags against the target release
+- Searches RHDHBUGS Jira per-plugin for known bugs affecting your versions
+- Filters breaking changes into "Affects You" vs "Does NOT Affect You"
+- Computes a 0-100 Readiness Score with transparent breakdown
+- Includes bundled release notes for RHDH 1.4–1.10
+
 See [rhdh-upgrade-helper](./skills/rhdh-upgrade-helper/SKILL.md) for the full skill definition. The skill:
 
-- resolves OCI references for every plugin via `rhdh-plugin-export-overlays` workspace metadata.
+- resolves OCI references for every plugin via the shipped catalog-index image, with overlay repo metadata as a fallback.
 - validates existing OCI plugin tags against the target release.
 - searches the RHDHBUGS Jira project per plugin for known bugs affecting your versions.
 - filters breaking changes into "Affects You" and "Does NOT Affect You" based on your config.
