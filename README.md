@@ -2,7 +2,6 @@
 
 Portable [Agent Plugin](https://agent-plugins.org/) with [Agent Skills](https://agentskills.io/specification) for adopting and using [Red Hat Developer Hub](https://developers.redhat.com/products/rhdh/overview) (RHDH).
 
-Formerly published as **RHDH Users Skill Pack**.
 
 > [!CAUTION]
 >
