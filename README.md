@@ -1,12 +1,12 @@
-# RHDH Users Skill Pack
+# RHDH Users Agent Plugin
 
-Agent Skills for adopting and using [Red Hat Developer Hub](https://developers.redhat.com/products/rhdh/overview) (RHDH).
+Portable [Agent Plugin](https://agent-plugins.org/) with [Agent Skills](https://agentskills.io/specification) for adopting and using [Red Hat Developer Hub](https://developers.redhat.com/products/rhdh/overview) (RHDH).
 
-Quick start: `npx skills add redhat-developer/rhdh-users-skill-pack`. The installer works with [50+ coding agents](https://github.com/vercel-labs/skills#supported-agents).
+Formerly published as **RHDH Users Skill Pack**.
 
 > [!CAUTION]
 >
-> There is no official, commercial support for RHDH Users Skill Pack. Use RHDH Users Skill Pack at your own risk.
+> There is no official, commercial support for RHDH Users Agent Plugin. Use RHDH Users Agent Plugin at your own risk.
 
 ## Included skills
 
@@ -72,7 +72,7 @@ Example prompts:
 
 ## skill-maker
 
-Create, audit, or consolidate [Agent Skills](https://agentskills.io/specification). Use this skill when you package your own RHDH workflows or contribute skills to this pack.
+Create, audit, or consolidate [Agent Skills](https://agentskills.io/specification). Use this skill when you package your own RHDH workflows or contribute skills to this Plugin.
 
 See [skill-maker](./skills/skill-maker/SKILL.md) for the full skill definition. Capabilities:
 
@@ -88,42 +88,52 @@ Example prompts:
 
 ## Installation
 
+This repository is an [Agent Plugin](https://agent-plugins.org/) (`plugin.json` at the repository root). You can install its Skills with the Skills installer, or load the Plugin in a Plugin-aware Client.
+
+### Skills installer
+
+Works with [50+ coding agents](https://github.com/vercel-labs/skills#supported-agents):
+
 ```bash
-npx skills add redhat-developer/rhdh-users-skill-pack
+npx skills add redhat-developer/rhdh-users-agent-plugin
 ```
 
 Install one skill only:
 
 ```bash
-npx skills add redhat-developer/rhdh-users-skill-pack --skill rhdh-templates
-npx skills add redhat-developer/rhdh-users-skill-pack --skill skill-maker
+npx skills add redhat-developer/rhdh-users-agent-plugin --skill rhdh-templates
+npx skills add redhat-developer/rhdh-users-agent-plugin --skill skill-maker
 ```
 
 List skills without installing:
 
 ```bash
-npx skills add redhat-developer/rhdh-users-skill-pack --list
+npx skills add redhat-developer/rhdh-users-agent-plugin --list
 ```
 
 Target a specific agent:
 
 ```bash
-npx skills add redhat-developer/rhdh-users-skill-pack -a claude-code
-npx skills add redhat-developer/rhdh-users-skill-pack -a cursor
+npx skills add redhat-developer/rhdh-users-agent-plugin -a claude-code
+npx skills add redhat-developer/rhdh-users-agent-plugin -a cursor
 ```
-
-Supported agents include Claude Code, Cursor, Codex, Pi, and [many others](https://github.com/vercel-labs/skills#supported-agents).
 
 Local checkout for development:
 
 ```bash
-git clone https://github.com/redhat-developer/rhdh-users-skill-pack.git
-npx skills add ./rhdh-users-skill-pack
+git clone https://github.com/redhat-developer/rhdh-users-agent-plugin.git
+npx skills add ./rhdh-users-agent-plugin
 ```
+
+### Agent Plugins clients
+
+Plugin-aware Clients discover this package from root `plugin.json` and the `skills/` directory. Install or enable the Plugin through your Client’s Plugin UI or marketplace when listed.
+
+For local development in Cursor, copy or place this repository under `~/.cursor/plugins/local/rhdh-users-agent-plugin`, then reload the window and confirm the Skills under Customize. Other Clients use their own local-folder or marketplace install flow; see [agent-plugins.org](https://agent-plugins.org/) and your Client’s docs.
 
 ## How to use
 
-1. Install the pack (see above).
+1. Install the Plugin or its Skills (see above).
 2. Open your project in an agent-enabled editor or CLI.
 3. Describe your goal in plain language. For example: "help me turn this repo into an RHDH Software Template."
 
@@ -136,13 +146,17 @@ Use the skill-maker skill to audit my SKILL.md
 
 ## Frequently asked questions
 
+### What is an Agent Plugin?
+
+A directory with a root `plugin.json` and optional components in fixed locations (Skills under `skills/`, optional MCP config). See the [Agent Plugins specification](https://agent-plugins.org/).
+
 ### What is an Agent Skill?
 
 A folder with a `SKILL.md` file (YAML front matter and instructions) that agents load when relevant. See the [Agent Skills specification](https://agentskills.io/specification).
 
 ### How is this different from `redhat-developer/rhdh-skill`?
 
-This repository is the user-facing skill pack. Its skills help users adopt and operate RHDH. The [`rhdh-skill`](https://github.com/redhat-developer/rhdh-skill) repository adds skills for the RHDH engineering team (Jira, release management, Extensions Catalog, lifecycle checks, CI tooling). Most RHDH users do not need those skills.
+This repository is the user-facing Agent Plugin. Its skills help users adopt and operate RHDH. The [`rhdh-skill`](https://github.com/redhat-developer/rhdh-skill) repository adds skills for the RHDH engineering team (Jira, release management, Extensions Catalog, lifecycle checks, CI tooling). Most RHDH users do not need those skills.
 
 ### Can I contribute a new skill?
 
@@ -158,8 +172,8 @@ Yes. See [CONTRIBUTING.md](./CONTRIBUTING.md). Proposed skills should help RHDH 
 For contributors validating changes locally:
 
 ```bash
-git clone https://github.com/redhat-developer/rhdh-users-skill-pack.git
-cd rhdh-users-skill-pack
+git clone https://github.com/redhat-developer/rhdh-users-agent-plugin.git
+cd rhdh-users-agent-plugin
 uv sync --extra dev
 git config core.hooksPath .githooks
 uv run pytest

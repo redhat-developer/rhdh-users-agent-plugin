@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for rhdh-users-skill-pack tests."""
+"""Shared pytest fixtures for rhdh-users-agent-plugin tests."""
 
 from pathlib import Path
 

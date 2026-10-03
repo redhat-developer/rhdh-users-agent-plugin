@@ -1,0 +1,20 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "rhdh-users-agent-plugin",
+  "version": "0.1.0",
+  "description": "Portable Agent Plugin with skills for adopting and operating Red Hat Developer Hub.",
+  "author": {
+    "name": "Red Hat Developer Hub",
+    "url": "https://developers.redhat.com/products/rhdh/overview"
+  },
+  "homepage": "https://github.com/redhat-developer/rhdh-users-agent-plugin",
+  "repository": "https://github.com/redhat-developer/rhdh-users-agent-plugin",
+  "license": "Apache-2.0",
+  "keywords": [
+    "rhdh",
+    "red-hat-developer-hub",
+    "backstage",
+    "agent-skills",
+    "software-templates"
+  ]
+}

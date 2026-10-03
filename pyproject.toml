@@ -1,7 +1,7 @@
 [project]
-name = "rhdh-users-skill-pack"
+name = "rhdh-users-agent-plugin"
 version = "0.1.0"
-description = "Agent Skills pack for Red Hat Developer Hub users"
+description = "Portable Agent Plugin with skills for adopting and operating Red Hat Developer Hub"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
