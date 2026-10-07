@@ -1,4 +1,4 @@
-# Contributing to RHDH Users Skill Pack
+# Contributing to RHDH Users Agent Plugin
 
 Thank you for helping improve Agent Skills for Red Hat Developer Hub users.
 
@@ -6,13 +6,13 @@ This project uses the Apache-2.0 License.
 
 ## What belongs in this repository
 
-This pack is for platform users. Its skills help users adopt, operate, and get value from Red Hat Developer Hub. RHDH Engineering team workflows (Jira automation, release and CI tooling) belong in [`redhat-developer/rhdh-skill`](https://github.com/redhat-developer/rhdh-skill).
+This Plugin is for platform users. Its skills help users adopt, operate, and get value from Red Hat Developer Hub. RHDH Engineering team workflows (Jira automation, release and CI tooling) belong in [`redhat-developer/rhdh-skill`](https://github.com/redhat-developer/rhdh-skill).
 
 ## Get started
 
 ```bash
-git clone https://github.com/redhat-developer/rhdh-users-skill-pack.git
-cd rhdh-users-skill-pack
+git clone https://github.com/redhat-developer/rhdh-users-agent-plugin.git
+cd rhdh-users-agent-plugin
 uv sync --extra dev
 git config core.hooksPath .githooks
 ```
@@ -42,6 +42,7 @@ Both run automatically via the pre-commit hook when `pre-commit` is installed.
 4. Prefer stdlib-only Python for bundled scripts unless a dependency is clearly justified.
 5. Update the skills table in [README.md](./README.md) when you add a new skill.
 6. Add or update tests under `tests/` when you change scripts or validation logic.
+7. Do not add a `plugin.json` inside a skill directory. This repository is already an [Agent Plugin](https://agent-plugins.org/) with a root `plugin.json`; skills are components under `skills/`.
 
 Use the bundled `skill-maker` skill to interview, draft, and audit new skills before you open a PR.
 

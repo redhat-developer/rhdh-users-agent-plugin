@@ -1,0 +1,3 @@
+# Adopt Agent Plugins packaging and rebrand to RHDH Users Agent Plugin
+
+This repository already shipped Agent Skills under `skills/`, but Clients that speak Agent Plugins need a root `plugin.json` and a clear Plugin identity. We adopted Agent Plugins 1.0.0 claimed conformance (manifest + Skills only, no MCP or client extensions), renamed the product from "RHDH Users Skill Pack" to **RHDH Users Agent Plugin**, and aligned the machine id to `rhdh-users-agent-plugin`. The Skills installer (`npx skills`) stays as an additive install path beside Plugin-aware Client install; marketplace submission is intentionally out of scope. The GitHub repository rename follows in a separate post-merge step so redirects cover the new clone and installer URLs.

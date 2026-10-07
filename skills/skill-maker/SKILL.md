@@ -9,6 +9,8 @@ description: Create, audit, or consolidate agent skills following the Agent Skil
 
 Create agent skills following the [Agent Skills open standard](https://agentskills.io/specification).
 
+Skills in this repository ship as components of the root [Agent Plugin](https://agent-plugins.org/) (`plugin.json` at the repository root under `skills/<name>/`). Do not place a `plugin.json` inside a skill directory.
+
 What do you need to do?
 
 1. **Audit an existing skill** — Review, improve, or debug a SKILL.md

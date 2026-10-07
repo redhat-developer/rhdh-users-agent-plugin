@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Agent Skills for Red Hat Developer Hub (RHDH) users. Skills follow the [Agent Skills open standard](https://agentskills.io/specification).
+RHDH Users Agent Plugin — Agent Skills for Red Hat Developer Hub (RHDH) users, packaged as an [Agent Plugin](https://agent-plugins.org/) (`plugin.json` at the repository root). Skills follow the [Agent Skills open standard](https://agentskills.io/specification).
 
 ## 1. Think Before Coding
 
@@ -72,4 +72,4 @@ User-facing skills live under `skills/`:
 - `skill-maker` — Create, audit, and consolidate Agent Skills
 - `rhdh-upgrade-helper` — Upgrade assessment for RHDH — analyzes config files against a target release to produce a prioritized migration plan with readiness scoring
 
-When adding a skill, update [README.md](./README.md) and keep `SKILL.md` `name` aligned with the directory name per the Agent Skills spec.
+When adding a skill, update [README.md](./README.md) and keep `SKILL.md` `name` aligned with the directory name per the Agent Skills spec. Do not nest a `plugin.json` inside a skill directory; the Plugin manifest stays at the repository root.

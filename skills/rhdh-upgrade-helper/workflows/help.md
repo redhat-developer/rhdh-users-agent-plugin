@@ -157,4 +157,4 @@ Includes RHDH 1.4 through 1.10. Missing versions auto-fetched via `lynx` if avai
 
 ### Support
 
-Report issues: <https://github.com/redhat-developer/rhdh-users-skill-pack/issues>
+Report issues: <https://github.com/redhat-developer/rhdh-users-agent-plugin/issues>
