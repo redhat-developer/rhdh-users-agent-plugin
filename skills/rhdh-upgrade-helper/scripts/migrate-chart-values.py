@@ -1027,6 +1027,46 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
 # ---------------------------------------------------------------------------
 
 
+def _place_comment_at_path(lines: list[str], dotted_path: str, comment: str) -> bool:
+    """Find the YAML line for a dotted path and insert a comment above it.
+
+    Walks the path segments (e.g. "appConfig.app.baseUrl") through the YAML
+    lines, tracking indentation to match the nesting level. Inserts the
+    comment at the indentation of the matched line. Returns True if placed.
+    """
+    segments = dotted_path.replace("[", ".[").split(".")
+    search_from = 0
+    last_match = -1
+    last_indent = -1
+
+    for seg in segments:
+        # List index segments like [0] — skip, stay at current position
+        if seg.startswith("["):
+            continue
+        target = seg + ":"
+        for i in range(search_from, len(lines)):
+            stripped = lines[i].lstrip()
+            if stripped.startswith("#"):
+                continue
+            indent = len(lines[i]) - len(stripped)
+            if indent <= last_indent and last_indent >= 0:
+                continue
+            if stripped.startswith(target):
+                last_match = i
+                last_indent = indent
+                search_from = i + 1
+                break
+        else:
+            break
+
+    if last_match < 0:
+        return False
+
+    indent_str = lines[last_match][:last_indent]
+    lines.insert(last_match, f"{indent_str}{comment}")
+    return True
+
+
 def add_review_comments(yaml_str: str, report: MigrationReport) -> str:
     """Insert MIGRATION-REVIEW comments into the YAML output."""
     lines = yaml_str.split("\n")
@@ -1048,37 +1088,53 @@ def add_review_comments(yaml_str: str, report: MigrationReport) -> str:
         header_comments.append("# ================================================================")
         header_comments.append("")
 
+    # Map areas to YAML search keys for inline placement.
+    # Areas with a "mapped_to" field use that dotted path to find the line.
+    area_key_map: dict[str, str | tuple[str, ...] | None] = {
+        "ingress": "ingress:",
+        "args": ("extraArgs:", "argsOverride:"),
+        "extraEnvFrom": "extraEnvFrom:",
+        "initContainers": ("dynamicPlugins:", "extraInitContainers:", "preInitContainers:"),
+        "networkPolicy": None,
+        "intelligentAssistant": "intelligentAssistant:",
+        "authSecret": "auth:",
+        "orchestrator": "orchestrator:",
+    }
+
     for item in report.review:
         area = item["area"]
         desc = item["description"]
-        # Find the YAML key that corresponds to this area
-        area_key_map = {
-            "ingress": "ingress:",
-            "args": ("extraArgs:", "argsOverride:"),
-            "extraEnvFrom": "extraEnvFrom:",
-            "initContainers": ("dynamicPlugins:", "extraInitContainers:", "preInitContainers:"),
-            "networkPolicy": None,
-            "intelligentAssistant": "intelligentAssistant:",
-            "authSecret": "auth:",
-            "orchestrator": "orchestrator:",
-        }
-        search_keys = area_key_map.get(area)
-        if search_keys is None:
-            header_comments.append(f"# MIGRATION-REVIEW [{area}]: {desc}")
-            header_comments.append("")
-            continue
+        comment_text = f"# MIGRATION-REVIEW [{area}]: {desc}"
+        placed = False
 
-        if isinstance(search_keys, str):
-            search_keys = (search_keys,)
+        # Try mapped_to first — find the deepest matching YAML key line
+        mapped_to = item.get("mapped_to", "")
+        if mapped_to:
+            placed = _place_comment_at_path(lines, mapped_to, comment_text)
 
-        for sk in search_keys:
-            for i, line in enumerate(lines):
-                stripped = line.lstrip()
-                if stripped.startswith(sk):
-                    indent = line[: len(line) - len(stripped)]
-                    comment = f"{indent}# MIGRATION-REVIEW [{area}]: {desc}"
-                    lines.insert(i, comment)
+        # Fall back to area_key_map
+        if not placed:
+            search_keys = area_key_map.get(area)
+            if search_keys is None:
+                header_comments.append(comment_text)
+                header_comments.append("")
+                continue
+            if isinstance(search_keys, str):
+                search_keys = (search_keys,)
+            for sk in search_keys:
+                for i, line in enumerate(lines):
+                    stripped = line.lstrip()
+                    if stripped.startswith(sk):
+                        indent = line[: len(line) - len(stripped)]
+                        lines.insert(i, f"{indent}{comment_text}")
+                        placed = True
+                        break
+                if placed:
                     break
+
+        if not placed:
+            header_comments.append(comment_text)
+            header_comments.append("")
 
     for key in report.unknown_upstream_keys:
         top_key = key.split(".")[0] + ":"
