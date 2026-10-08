@@ -1,4 +1,4 @@
-# Chart Migration: RHDH 1.y to 2.y Values Structure
+# Chart migration: RHDH 1.y to 2.y values structure
 
 The downstream RHDH Helm chart (`redhat-developer-hub` at `charts.openshift.io`) keeps the
 same name across major versions. What changes is the **values structure**: the 1.y chart

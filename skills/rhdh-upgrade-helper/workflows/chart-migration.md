@@ -1,4 +1,4 @@
-# Workflow: Chart Migration (1.y to 2.y)
+# Workflow: Chart migration (1.y to 2.y)
 
 This workflow handles RHDH Helm chart major version upgrades where the values structure
 changes. It combines a deterministic migration script with AI-assisted resolution of
@@ -13,7 +13,7 @@ Read these references before proceeding:
 - `references/rhdh-local.md` — RHDH Local detection and recommendation
 </required_reading>
 
-## Step 0: Validate Prerequisites
+## Step 0: Validate prerequisites
 
 1. Confirm this is a major version upgrade: the RHDH major version in `--from` differs
    from `--to` (e.g., 1.10 → 2.1).
@@ -28,12 +28,12 @@ If no values file can be found, inform the user:
 "Chart migration requires your 1.y Helm values file. Provide it with `--config ./values.yaml`
 or export from a running release: `helm get values <release> -n <ns> -o yaml > old-values.yaml`"
 
-## Step 1: Secrets Scan
+## Step 1: Secrets scan
 
 Before any processing, scan the values file for embedded secrets per
 `references/secrets-detection.md`. Same rules as `workflows/full-report.md` Step 0.
 
-## Step 2: Run Deterministic Migration
+## Step 2: Run deterministic migration
 
 The migration script **never modifies the original values file**. It reads the
 1.y file and writes a separate draft 2.y file for the customer to inspect and
@@ -68,7 +68,7 @@ Read the outputs:
 Present a summary to the user:
 
 ```
-## Chart Values Migration: RHDH {from} → {to}
+## Chart values migration: RHDH {from} → {to}
 
 **Deterministic mappings applied:** {N} keys migrated automatically
 **Removed values:** {M} keys with no 2.y equivalent
@@ -78,7 +78,7 @@ Present a summary to the user:
 
 If `MIGRATION_EXIT == 0` (no review needed), skip to Step 4.
 
-## Step 3: AI-Assisted Resolution of Ambiguous Areas
+## Step 3: AI-assisted resolution of ambiguous areas
 
 For each review item in the migration report, walk the user through the resolution.
 Read the corresponding section of `references/chart-migration-1y-2y.md` for guidance.
@@ -137,7 +137,7 @@ If `initContainerImage` and `createDBJobImage` differed, ask which to use.
 Apply the user's confirmed changes to the draft file. The final 2.y values file should
 have no remaining `MIGRATION-REVIEW` markers.
 
-## Step 4: Behavioral Change Warnings
+## Step 4: Behavioral change warnings
 
 Regardless of whether ambiguous areas existed, warn about behavioral changes:
 
@@ -171,7 +171,7 @@ Regardless of whether ambiguous areas existed, warn about behavioral changes:
    helm template <release> redhat-developer/redhat-developer-hub -f new-values.yaml
    ```
 
-## Step 5: Produce Combined Report
+## Step 5: Produce combined report
 
 If the user provided config files beyond just the Helm values (e.g., app-config.yaml,
 dynamic-plugins.yaml), run `workflows/full-report.md` with the **migrated** values file
@@ -181,7 +181,7 @@ as input alongside the other config files. This produces the standard upgrade as
 If only the Helm values file was provided, produce a standalone chart migration report:
 
 ```
-## Chart Migration Report: RHDH {from} → {to}
+## Chart migration report: RHDH {from} → {to}
 ### Generated: {date}
 
 > **Migration status:** {Complete | Complete with manual actions}
@@ -191,24 +191,24 @@ If only the Helm values file was provided, produce a standalone chart migration 
 
 ---
 
-### Deterministic Migrations Applied
+### Deterministic migrations applied
 
 {N} values keys automatically translated to the 2.y structure.
 No action needed for these.
 
-### Reviewed and Confirmed
+### Reviewed and confirmed
 
 {For each resolved ambiguous area, show what was decided}
 
-### Manual Actions Required
+### Manual actions required
 
 {List any post-migration steps: create secrets, add NetworkPolicy rules, etc.}
 
-### Behavioral Change Warnings
+### Behavioral change warnings
 
 {PostgreSQL version, HPA defaults, env var renames, etc.}
 
-### Pre-Upgrade Validation
+### Pre-upgrade validation
 
 Run this command to validate the migrated values before upgrading:
 
@@ -222,7 +222,7 @@ Then upgrade:
 helm upgrade --install <release> redhat-developer/redhat-developer-hub -n <namespace> -f {output-file}
 ```
 
-### Migrated Values File
+### Migrated values file
 
 The migrated 2.y values file has been written to: `{output-path}`
 ```
