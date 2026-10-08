@@ -39,10 +39,7 @@ def _run_migration(fixture_name: str) -> tuple[dict, dict, str]:
     raw_output = result_yaml.stdout
 
     # Strip comment lines for YAML parsing
-    yaml_lines = [
-        line for line in raw_output.split("\n")
-        if not line.lstrip().startswith("#")
-    ]
+    yaml_lines = [line for line in raw_output.split("\n") if not line.lstrip().startswith("#")]
     output_data = yaml.safe_load("\n".join(yaml_lines)) or {}
 
     return report, output_data, raw_output
@@ -82,18 +79,16 @@ def check_deterministic_mappings(
 
     # Verify no upstream.* keys remain in output
     old_prefixes_in_output = [
-        key
-        for key in _flatten_keys(output_data)
-        if key.startswith("upstream.")
+        key for key in _flatten_keys(output_data) if key.startswith("upstream.")
     ]
     if old_prefixes_in_output:
-        failures.append(
-            f"Old upstream.* keys still in output: {old_prefixes_in_output[:5]}"
-        )
+        failures.append(f"Old upstream.* keys still in output: {old_prefixes_in_output[:5]}")
 
     return {
         "pass": len(failures) == 0,
-        "score": 1.0 if not failures else max(0, 1.0 - len(failures) / max(len(expected_mappings), 1)),
+        "score": 1.0
+        if not failures
+        else max(0, 1.0 - len(failures) / max(len(expected_mappings), 1)),
         "details": "; ".join(failures) if failures else "All mappings correct",
         "applied_count": report.get("summary", {}).get("total_deterministic", 0),
     }
@@ -110,9 +105,7 @@ def check_ambiguous_detection(
 
     report, _, raw_output = _run_migration(fixture)
 
-    review_areas = [
-        item.get("area") for item in report.get("review", [])
-    ]
+    review_areas = [item.get("area") for item in report.get("review", [])]
 
     missing = [a for a in expected_areas if a not in review_areas]
     markers_in_output = raw_output.count("MIGRATION-REVIEW")
@@ -203,10 +196,7 @@ def check_valid_yaml(
     _, _, raw_output = _run_migration(fixture)
 
     # Strip comment lines
-    yaml_lines = [
-        line for line in raw_output.split("\n")
-        if not line.lstrip().startswith("#")
-    ]
+    yaml_lines = [line for line in raw_output.split("\n") if not line.lstrip().startswith("#")]
     yaml_str = "\n".join(yaml_lines)
 
     try:

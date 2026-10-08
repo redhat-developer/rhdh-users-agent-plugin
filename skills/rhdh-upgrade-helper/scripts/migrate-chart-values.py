@@ -60,7 +60,11 @@ DETERMINISTIC_MAPPINGS: list[tuple[str, str | None, str]] = [
     ("upstream.fullnameOverride", "fullnameOverride", ""),
     ("upstream.commonLabels", "commonLabels", ""),
     ("upstream.commonAnnotations", "commonAnnotations", ""),
-    ("upstream.extraDeploy", "extraDeploy", "can deploy additional resources alongside the chart (e.g., custom NetworkPolicy rules)"),
+    (
+        "upstream.extraDeploy",
+        "extraDeploy",
+        "can deploy additional resources alongside the chart (e.g., custom NetworkPolicy rules)",
+    ),
     # Global parameters
     ("global.clusterRouterBase", "openshift.clusterRouterBase", ""),
     ("global.host", "host", "promoted to root"),
@@ -309,6 +313,7 @@ AMBIGUOUS_DESCRIPTIONS: dict[str, str] = {
 # YAML helpers
 # ---------------------------------------------------------------------------
 
+
 def deep_get(data: dict, dotpath: str) -> tuple[Any, bool]:
     """Get a value from a nested dict by dotted path. Returns (value, found)."""
     keys = dotpath.split(".")
@@ -369,6 +374,7 @@ def flatten_keys(data: dict, prefix: str = "") -> list[str]:
 # Ambiguous area handlers
 # ---------------------------------------------------------------------------
 
+
 def handle_ingress(old_data: dict) -> tuple[dict, list[str]]:
     """Transform 1.x ingress to 2.x structure."""
     ingress_data, found = deep_get(old_data, "upstream.ingress")
@@ -386,19 +392,23 @@ def handle_ingress(old_data: dict) -> tuple[dict, list[str]]:
     primary_host = ingress_data.get("host")
     primary_path = ingress_data.get("path", "/")
     if primary_host:
-        hosts.append({
-            "host": primary_host,
-            "paths": [{"path": primary_path}],
-        })
+        hosts.append(
+            {
+                "host": primary_host,
+                "paths": [{"path": primary_path}],
+            }
+        )
 
     extra_hosts = ingress_data.get("extraHosts", [])
     if isinstance(extra_hosts, list):
         for eh in extra_hosts:
             if isinstance(eh, dict):
-                hosts.append({
-                    "host": eh.get("name", eh.get("host", "")),
-                    "paths": [{"path": eh.get("path", "/")}],
-                })
+                hosts.append(
+                    {
+                        "host": eh.get("name", eh.get("host", "")),
+                        "paths": [{"path": eh.get("path", "/")}],
+                    }
+                )
 
     if hosts:
         new_ingress["hosts"] = hosts
@@ -408,10 +418,12 @@ def handle_ingress(old_data: dict) -> tuple[dict, list[str]]:
     if isinstance(old_tls, dict):
         if old_tls.get("enabled") and old_tls.get("secretName"):
             tls_hosts = [primary_host] if primary_host else []
-            tls_entries.append({
-                "hosts": tls_hosts,
-                "secretName": old_tls["secretName"],
-            })
+            tls_entries.append(
+                {
+                    "hosts": tls_hosts,
+                    "secretName": old_tls["secretName"],
+                }
+            )
             if not primary_host:
                 warnings.append(
                     "TLS enabled but no primary host found to associate with the TLS entry"
@@ -458,17 +470,23 @@ def handle_args(old_data: dict) -> tuple[str, Any, str]:
     if not found:
         return "", None, ""
 
-    if isinstance(args, list) and any(
-        isinstance(a, str) and "--config" in a for a in args
-    ):
-        return "argsOverride", args, (
-            "Your args contain --config flags, suggesting you manage config loading manually. "
-            "Using argsOverride (replaces all arguments). Verify this is correct."
+    if isinstance(args, list) and any(isinstance(a, str) and "--config" in a for a in args):
+        return (
+            "argsOverride",
+            args,
+            (
+                "Your args contain --config flags, suggesting you manage config loading manually. "
+                "Using argsOverride (replaces all arguments). Verify this is correct."
+            ),
         )
 
-    return "extraArgs", args, (
-        "Using extraArgs (appends after system --config flags). "
-        "If you need full argument control, change to argsOverride."
+    return (
+        "extraArgs",
+        args,
+        (
+            "Using extraArgs (appends after system --config flags). "
+            "If you need full argument control, change to argsOverride."
+        ),
     )
 
 
@@ -583,14 +601,21 @@ def handle_lightspeed(old_data: dict) -> tuple[dict, list[str]]:
         )
 
     removed_keys = [
-        "initContainer", "ragVolume", "secret.optional",
-        "sidecar.name", "sidecar.portName", "sidecar.containerPort",
-        "runtimeVolume.name", "runtimeVolume.mountPath",
+        "initContainer",
+        "ragVolume",
+        "secret.optional",
+        "sidecar.name",
+        "sidecar.portName",
+        "sidecar.containerPort",
+        "runtimeVolume.name",
+        "runtimeVolume.mountPath",
     ]
     for rk in removed_keys:
         val, exists = deep_get(ls_data, rk)
         if exists:
-            warnings.append(f"global.lightspeed.{rk} is removed in 2.x (hardcoded or no longer needed)")
+            warnings.append(
+                f"global.lightspeed.{rk} is removed in 2.x (hardcoded or no longer needed)"
+            )
 
     return ia, warnings
 
@@ -647,7 +672,12 @@ def handle_orchestrator(old_data: dict) -> tuple[dict, list[str]]:
             new_sfp[nest_key] = {"image": split_image_string(orch[img_field])}
 
     # Preserve any keys not covered by the migration
-    migrated_keys = set(db_field_map) | {"initContainerImage", "createDBJobImage"} | set(job_field_map) | {"dataIndexImage", "jobServiceImage"}
+    migrated_keys = (
+        set(db_field_map)
+        | {"initContainerImage", "createDBJobImage"}
+        | set(job_field_map)
+        | {"dataIndexImage", "jobServiceImage"}
+    )
     for k, v in orch.items():
         if k not in migrated_keys:
             new_sfp[k] = v
@@ -696,6 +726,7 @@ def handle_init_containers(old_data: dict) -> tuple[dict, list[str]]:
 # Core migration engine
 # ---------------------------------------------------------------------------
 
+
 class MigrationReport:
     """Tracks all transformations and review items."""
 
@@ -743,17 +774,21 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
         if not found:
             continue
         if new_path is None:
-            report.removed.append({
-                "old": old_path,
-                "notes": notes,
-            })
+            report.removed.append(
+                {
+                    "old": old_path,
+                    "notes": notes,
+                }
+            )
         else:
             deep_set(new_data, new_path, value)
-            report.applied.append({
-                "old": old_path,
-                "new": new_path,
-                "notes": notes,
-            })
+            report.applied.append(
+                {
+                    "old": old_path,
+                    "new": new_path,
+                    "notes": notes,
+                }
+            )
         deep_delete(data, old_path)
         handled_prefixes.add(old_path)
 
@@ -766,13 +801,15 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
             existing = new_data.get("ingress", {})
             existing.update(new_ingress)
             new_data["ingress"] = existing
-            report.review.append({
-                "area": "ingress",
-                "description": AMBIGUOUS_DESCRIPTIONS["ingress"],
-                "original_keys": [
-                    k for k in flatten_keys({"upstream": {"ingress": ingress_data}})
-                ],
-            })
+            report.review.append(
+                {
+                    "area": "ingress",
+                    "description": AMBIGUOUS_DESCRIPTIONS["ingress"],
+                    "original_keys": [
+                        k for k in flatten_keys({"upstream": {"ingress": ingress_data}})
+                    ],
+                }
+            )
             report.warnings.extend(ing_warnings)
         deep_delete(data, "upstream.ingress")
         handled_prefixes.add("upstream.ingress")
@@ -781,11 +818,13 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
     args_key, args_value, args_note = handle_args(data)
     if args_key and args_value is not None:
         deep_set(new_data, args_key, args_value)
-        report.review.append({
-            "area": "args",
-            "description": args_note,
-            "mapped_to": args_key,
-        })
+        report.review.append(
+            {
+                "area": "args",
+                "description": args_note,
+                "mapped_to": args_key,
+            }
+        )
         deep_delete(data, "upstream.backstage.args")
         handled_prefixes.add("upstream.backstage.args")
 
@@ -798,10 +837,12 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
         else:
             existing_env_from = env_from
         new_data["extraEnvFrom"] = existing_env_from
-        report.review.append({
-            "area": "extraEnvFrom",
-            "description": AMBIGUOUS_DESCRIPTIONS["extraEnvFrom"],
-        })
+        report.review.append(
+            {
+                "area": "extraEnvFrom",
+                "description": AMBIGUOUS_DESCRIPTIONS["extraEnvFrom"],
+            }
+        )
         deep_delete(data, "upstream.backstage.extraEnvVarsSecrets")
         deep_delete(data, "upstream.backstage.extraEnvVarsCM")
         handled_prefixes.add("upstream.backstage.extraEnvVarsSecrets")
@@ -811,10 +852,12 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
     auth_ref = handle_auth_secret(data)
     if auth_ref is not None:
         deep_set(new_data, "auth.backend.existingSecretRef", auth_ref)
-        report.review.append({
-            "area": "authSecret",
-            "description": AMBIGUOUS_DESCRIPTIONS["authSecret"],
-        })
+        report.review.append(
+            {
+                "area": "authSecret",
+                "description": AMBIGUOUS_DESCRIPTIONS["authSecret"],
+            }
+        )
         deep_delete(data, "global.auth.backend.existingSecret")
         handled_prefixes.add("global.auth.backend.existingSecret")
 
@@ -826,10 +869,12 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
                 new_data[k].update(v)
             else:
                 new_data[k] = v
-        report.review.append({
-            "area": "initContainers",
-            "description": AMBIGUOUS_DESCRIPTIONS["initContainers"],
-        })
+        report.review.append(
+            {
+                "area": "initContainers",
+                "description": AMBIGUOUS_DESCRIPTIONS["initContainers"],
+            }
+        )
         report.warnings.extend(init_warnings)
         deep_delete(data, "upstream.backstage.initContainers")
         handled_prefixes.add("upstream.backstage.initContainers")
@@ -837,11 +882,13 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
     # NetworkPolicy
     np_data, found = deep_get(data, "upstream.networkPolicy")
     if found:
-        report.review.append({
-            "area": "networkPolicy",
-            "description": AMBIGUOUS_DESCRIPTIONS["networkPolicy"],
-            "removed_keys": flatten_keys({"upstream": {"networkPolicy": np_data}}),
-        })
+        report.review.append(
+            {
+                "area": "networkPolicy",
+                "description": AMBIGUOUS_DESCRIPTIONS["networkPolicy"],
+                "removed_keys": flatten_keys({"upstream": {"networkPolicy": np_data}}),
+            }
+        )
         deep_delete(data, "upstream.networkPolicy")
         handled_prefixes.add("upstream.networkPolicy")
 
@@ -849,10 +896,12 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
     ia_data, ia_warnings = handle_lightspeed(data)
     if ia_data:
         new_data["intelligentAssistant"] = ia_data
-        report.review.append({
-            "area": "intelligentAssistant",
-            "description": AMBIGUOUS_DESCRIPTIONS["intelligentAssistant"],
-        })
+        report.review.append(
+            {
+                "area": "intelligentAssistant",
+                "description": AMBIGUOUS_DESCRIPTIONS["intelligentAssistant"],
+            }
+        )
         report.warnings.extend(ia_warnings)
         deep_delete(data, "global.lightspeed")
         handled_prefixes.add("global.lightspeed")
@@ -861,10 +910,12 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
     orch_result, orch_warnings = handle_orchestrator(data)
     if orch_result:
         deep_set(new_data, "orchestrator.sonataflowPlatform", orch_result)
-        report.review.append({
-            "area": "orchestrator",
-            "description": AMBIGUOUS_DESCRIPTIONS["orchestrator"],
-        })
+        report.review.append(
+            {
+                "area": "orchestrator",
+                "description": AMBIGUOUS_DESCRIPTIONS["orchestrator"],
+            }
+        )
         report.warnings.extend(orch_warnings)
         # Remove only the migrated keys from orchestrator
         for key in list(AMBIGUOUS_PREFIXES):
@@ -875,7 +926,9 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
     # 2b. Post-migration warnings for image and air-gapped behavior
     # Warn about digest/tag precedence when user sets image tags
     image_tag_paths = [
-        "image.tag", "postgresql.image.tag", "catalogIndex.image.tag",
+        "image.tag",
+        "postgresql.image.tag",
+        "catalogIndex.image.tag",
         "intelligentAssistant.core.image.tag",
     ]
     for tag_path in image_tag_paths:
@@ -889,7 +942,7 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
                     f"The downstream chart ships images with explicit digests by default. "
                     f"When both are set, the chart renders tag@digest, which can fail to "
                     f"resolve at pull time if they don't match (the chart's default digest "
-                    f"is merged by Helm). Either set `{digest_path}: \"\"` to clear the "
+                    f'is merged by Helm). Either set `{digest_path}: ""` to clear the '
                     f"default, or set it to the correct digest for your tag."
                 )
 
@@ -908,9 +961,7 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
     for key in remaining_keys:
         is_upstream = key.startswith(("upstream.", "global."))
         if is_upstream:
-            already_handled = any(
-                key == p or key.startswith(p + ".") for p in handled_prefixes
-            )
+            already_handled = any(key == p or key.startswith(p + ".") for p in handled_prefixes)
             if not already_handled:
                 report.unknown_upstream_keys.append(key)
 
@@ -925,35 +976,26 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
 # YAML output with review markers
 # ---------------------------------------------------------------------------
 
+
 def add_review_comments(yaml_str: str, report: MigrationReport) -> str:
     """Insert MIGRATION-REVIEW comments into the YAML output."""
     lines = yaml_str.split("\n")
     header_comments: list[str] = []
 
     if report.review:
-        header_comments.append(
-            "# ================================================================"
-        )
-        header_comments.append(
-            "# MIGRATION-REVIEW: This file was auto-generated from 1.x values."
-        )
-        header_comments.append(
-            f"# {len(report.applied)} keys migrated deterministically."
-        )
+        header_comments.append("# ================================================================")
+        header_comments.append("# MIGRATION-REVIEW: This file was auto-generated from 1.x values.")
+        header_comments.append(f"# {len(report.applied)} keys migrated deterministically.")
         header_comments.append(
             f"# {len(report.review)} area(s) flagged for review (search for MIGRATION-REVIEW)."
         )
         if report.removed:
-            header_comments.append(
-                f"# {len(report.removed)} key(s) removed (no 2.x equivalent)."
-            )
+            header_comments.append(f"# {len(report.removed)} key(s) removed (no 2.x equivalent).")
         if report.unknown_upstream_keys:
             header_comments.append(
                 f"# {len(report.unknown_upstream_keys)} unknown upstream key(s) carried over with warnings."
             )
-        header_comments.append(
-            "# ================================================================"
-        )
+        header_comments.append("# ================================================================")
         header_comments.append("")
 
     for item in report.review:
@@ -1010,6 +1052,7 @@ def add_review_comments(yaml_str: str, report: MigrationReport) -> str:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def _read_yaml(path: str) -> dict:
     """Read and parse a YAML file, returning the top-level mapping."""
@@ -1075,7 +1118,8 @@ def main() -> int:
         "separation. Your original files are never modified.",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         help="Output path: a file when migrating a single input, or a "
         "directory (created if needed) when migrating multiple inputs. "
         "Defaults to stdout for a single input.",
@@ -1103,8 +1147,7 @@ def main() -> int:
 
     if multi and not args.output:
         print(
-            "Error: -o/--output directory is required when migrating "
-            "multiple files",
+            "Error: -o/--output directory is required when migrating multiple files",
             file=sys.stderr,
         )
         return 2
@@ -1144,7 +1187,11 @@ def main() -> int:
             out_path = args.output
 
         report_dict, report = _migrate_one(
-            input_path, old_data, out_path, args.json, args.to,
+            input_path,
+            old_data,
+            out_path,
+            args.json,
+            args.to,
         )
         report_dict["file"] = input_path
         all_reports.append(report_dict)
@@ -1152,28 +1199,24 @@ def main() -> int:
             any_review = True
 
     # Write combined report
-    combined_report = all_reports[0] if len(all_reports) == 1 else {
-        "files": all_reports,
-        "summary": {
-            "total_files": len(all_reports),
-            "total_deterministic": sum(
-                r["summary"]["total_deterministic"] for r in all_reports
-            ),
-            "total_removed": sum(
-                r["summary"]["total_removed"] for r in all_reports
-            ),
-            "total_review": sum(
-                r["summary"]["total_review"] for r in all_reports
-            ),
-            "total_warnings": sum(
-                r["summary"]["total_warnings"] for r in all_reports
-            ),
-            "total_unknown": sum(
-                r["summary"]["total_unknown"] for r in all_reports
-            ),
-            "needs_review": any_review,
-        },
-    }
+    combined_report = (
+        all_reports[0]
+        if len(all_reports) == 1
+        else {
+            "files": all_reports,
+            "summary": {
+                "total_files": len(all_reports),
+                "total_deterministic": sum(
+                    r["summary"]["total_deterministic"] for r in all_reports
+                ),
+                "total_removed": sum(r["summary"]["total_removed"] for r in all_reports),
+                "total_review": sum(r["summary"]["total_review"] for r in all_reports),
+                "total_warnings": sum(r["summary"]["total_warnings"] for r in all_reports),
+                "total_unknown": sum(r["summary"]["total_unknown"] for r in all_reports),
+                "needs_review": any_review,
+            },
+        }
+    )
     if args.report:
         with open(args.report, "w") as f:
             json.dump(combined_report, f, indent=2)
