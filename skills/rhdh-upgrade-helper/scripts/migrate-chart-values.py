@@ -28,6 +28,7 @@ import argparse
 import copy
 import json
 import os
+import re
 import sys
 from typing import Any
 
@@ -759,6 +760,36 @@ class MigrationReport:
         }
 
 
+def _scan_janus_refs(
+    data: Any, path: str, pattern: re.Pattern[str], report: MigrationReport
+) -> None:
+    """Recursively scan values for Helm template references to janus-idp."""
+    if isinstance(data, dict):
+        for key, value in data.items():
+            child = f"{path}.{key}" if path else key
+            _scan_janus_refs(value, child, pattern, report)
+    elif isinstance(data, list):
+        for i, item in enumerate(data):
+            _scan_janus_refs(item, f"{path}[{i}]", pattern, report)
+    elif isinstance(data, str):
+        matches = pattern.findall(data)
+        if matches:
+            unique = sorted(set(matches))
+            replacements = ", ".join(f'"{m}" → "{m.replace("janus-idp", "rhdh")}"' for m in unique)
+            report.review.append(
+                {
+                    "area": "janusIdpTemplate",
+                    "description": (
+                        f"{path} contains Helm template reference(s): "
+                        f"{replacements}. The 2.y chart renamed internal "
+                        f"templates from janus-idp.* to rhdh.*. Review and "
+                        f"update these references."
+                    ),
+                    "mapped_to": path,
+                }
+            )
+
+
 def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
     """Apply all migrations to old_data and return (new_data, report)."""
     data = copy.deepcopy(old_data)
@@ -924,61 +955,41 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
         handled_prefixes.add("orchestrator.sonataflowPlatform")
 
     # 2b. Post-migration warnings for image and air-gapped behavior
-    # Handle digest/tag interaction when user sets image tags.
-    # The downstream chart ships images with explicit digests by default.
-    # When both tag and digest are set, the chart renders tag@digest, which
-    # can fail to resolve if they don't match.
-    DEFAULT_REGISTRY = "registry.redhat.io"
-    DEFAULT_REPOSITORY = "rhdh/rhdh-hub-rhel10"
-    image_tag_paths = [
-        "image.tag",
-        "postgresql.image.tag",
-        "catalogIndex.image.tag",
-        "intelligentAssistant.core.image.tag",
-    ]
-    for tag_path in image_tag_paths:
-        tag_val, has_tag = deep_get(new_data, tag_path)
-        if has_tag and tag_val:
-            digest_path = tag_path.rsplit(".", 1)[0] + ".digest"
-            digest_val, has_digest = deep_get(new_data, digest_path)
-            if has_digest and digest_val == "":
-                continue
-            prefix = tag_path.rsplit(".", 1)[0]
-            registry_val, _ = deep_get(new_data, f"{prefix}.registry")
-            repo_val, _ = deep_get(new_data, f"{prefix}.repository")
-            is_custom_image = (registry_val and registry_val != DEFAULT_REGISTRY) or (
-                repo_val and repo_val != DEFAULT_REPOSITORY
-            )
-            if is_custom_image:
-                deep_set(new_data, digest_path, "")
-                report.review.append(
-                    {
-                        "area": "imageDigest",
-                        "description": (
-                            f"{tag_path} is set with a non-default image "
-                            f"(registry={registry_val}, repository={repo_val}). "
-                            f'Set {digest_path} to "" to prevent the chart\'s '
-                            f"default digest from being merged by Helm. Verify "
-                            f"this is correct, or set the digest to match your tag."
-                        ),
-                        "mapped_to": digest_path,
-                    }
-                )
-            else:
-                report.review.append(
-                    {
-                        "area": "imageDigest",
-                        "description": (
-                            f"{tag_path} is set. The downstream chart ships images "
-                            f"with explicit digests by default. When both are set, "
-                            f"the chart renders tag@digest, which can fail to resolve "
-                            f"at pull time if they don't match. Either set "
-                            f'`{digest_path}: ""` to clear the default, or set it '
-                            f"to the correct digest for your tag."
-                        ),
-                        "mapped_to": digest_path,
-                    }
-                )
+    # Handle digest/tag interaction for all image references.
+    # The downstream chart ships images with explicit digests. When any of
+    # registry, repository, or tag is explicitly set, clear the digest to
+    # prevent the chart's default digest from being merged by Helm.
+    # Scan all *.image.{tag,registry,repository} paths dynamically.
+    all_keys = flatten_keys(new_data)
+    image_prefixes: set[str] = set()
+    for k in all_keys:
+        if k.endswith((".image.tag", ".image.registry", ".image.repository")):
+            image_prefixes.add(k.rsplit(".", 1)[0])
+        elif k in ("image.tag", "image.registry", "image.repository"):
+            image_prefixes.add("image")
+    for prefix in sorted(image_prefixes):
+        digest_path = f"{prefix}.digest"
+        digest_val, has_digest = deep_get(new_data, digest_path)
+        if has_digest and digest_val == "":
+            continue
+        deep_set(new_data, digest_path, "")
+        overrides = []
+        for field in ("registry", "repository", "tag"):
+            val, has = deep_get(new_data, f"{prefix}.{field}")
+            if has and val:
+                overrides.append(f"{field}={val}")
+        report.review.append(
+            {
+                "area": "imageDigest",
+                "description": (
+                    f"{prefix} has custom overrides ({', '.join(overrides)}). "
+                    f'Set {digest_path} to "" to prevent the chart\'s default '
+                    f"digest from being merged by Helm. Verify this is correct, "
+                    f"or set the digest to match your image."
+                ),
+                "mapped_to": digest_path,
+            }
+        )
 
     # Warn about air-gapped plugin limitation
     global_registry, has_gr = deep_get(new_data, "global.imageRegistry")
@@ -989,6 +1000,11 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
             "plugin references (oci:// or ref:// in dynamicPlugins.plugins). Plugin OCI "
             "images must be mirrored separately and their references updated individually."
         )
+
+    # Flag Helm template references to "janus-idp" — the 2.y chart renamed
+    # internal templates from janus-idp.* to rhdh.*.
+    _JANUS_IDP_RE = re.compile(r"janus-idp\.\w+")
+    _scan_janus_refs(new_data, "", _JANUS_IDP_RE, report)
 
     # 3. Pass through remaining keys
     remaining_keys = flatten_keys(data)
