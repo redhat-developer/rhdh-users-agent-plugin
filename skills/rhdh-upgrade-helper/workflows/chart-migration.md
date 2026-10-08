@@ -39,19 +39,30 @@ The migration script **never modifies the original values file**. It reads the
 1.x file and writes a separate draft 2.x file for the customer to inspect and
 validate before using it in an upgrade.
 
-Execute the migration script on the user's values file:
+Execute the migration script on the user's values file(s). If the customer uses
+multiple values files (e.g., base + environment overrides), pass them all — each
+is migrated independently and the output preserves the file separation:
 
 ```bash
 SKILL_DIR="$(dirname "$(dirname "$0")")"  # or the installed skill directory
+
+# Single file
 python3 "$SKILL_DIR/scripts/migrate-chart-values.py" "$VALUES_FILE" \
   -o /tmp/rhdh-2x-values-draft.yaml \
   --report /tmp/rhdh-migration-report.json
+
+# Multiple files — -o must be a directory
+python3 "$SKILL_DIR/scripts/migrate-chart-values.py" $VALUES_FILES \
+  -o /tmp/rhdh-2x-values-draft/ \
+  --report /tmp/rhdh-migration-report.json
+
 MIGRATION_EXIT=$?
 ```
 
-Read both outputs:
-- `/tmp/rhdh-2x-values-draft.yaml` — the draft 2.x values with MIGRATION-REVIEW markers
-- `/tmp/rhdh-migration-report.json` — structured report of all transformations
+Read the outputs:
+- Single file: `/tmp/rhdh-2x-values-draft.yaml` — the draft 2.x values with MIGRATION-REVIEW markers
+- Multiple files: `/tmp/rhdh-2x-values-draft/<filename>.yaml` — one draft per input file
+- `/tmp/rhdh-migration-report.json` — structured report of all transformations (combined across files when multiple)
 
 Present a summary to the user:
 

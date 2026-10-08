@@ -2,13 +2,19 @@
 """Migrate RHDH Helm chart values from 1.x to 2.x structure.
 
 Applies deterministic key mappings and flags ambiguous areas that need
-AI-assisted or manual resolution. The original input file is never
-modified — output goes to a separate file (via -o) or stdout.
+AI-assisted or manual resolution. Original input files are never
+modified — output goes to separate files (via -o) or stdout.
 
 Usage:
-    python3 migrate-chart-values.py old-values.yaml -o new-values.yaml [--report report.json]
-    python3 migrate-chart-values.py old-values.yaml          # prints to stdout
-    cat old-values.yaml | python3 migrate-chart-values.py -   # reads from stdin
+    python3 migrate-chart-values.py values.yaml -o migrated.yaml [--report report.json]
+    python3 migrate-chart-values.py values.yaml                   # prints to stdout
+    cat values.yaml | python3 migrate-chart-values.py -            # reads from stdin
+    python3 migrate-chart-values.py base.yaml prod.yaml -o /tmp/migrated/  # per-file output
+
+Multiple input files are migrated independently, preserving the
+customer's file organization. When multiple files are given, -o must
+be a directory (created if needed); each output keeps its original
+filename.
 
 Exit codes:
     0  All mappings deterministic (no review needed)
@@ -20,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import os
 import json
 import re
 import sys
@@ -1006,18 +1013,68 @@ def add_review_comments(yaml_str: str, report: MigrationReport) -> str:
 # CLI
 # ---------------------------------------------------------------------------
 
+def _read_yaml(path: str) -> dict:
+    """Read and parse a YAML file, returning the top-level mapping."""
+    if path == "-":
+        raw = sys.stdin.read()
+    else:
+        with open(path) as f:
+            raw = f.read()
+    data = yaml.safe_load(raw)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: input must be a YAML mapping (dict)")
+    return data
+
+
+def _migrate_one(
+    input_path: str,
+    old_data: dict,
+    output_path: str | None,
+    json_mode: bool,
+) -> tuple[dict, MigrationReport]:
+    """Migrate a single values file and write output. Returns (report_dict, report)."""
+    new_data, report = migrate(old_data)
+
+    if json_mode:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        yaml_str = yaml.dump(
+            new_data,
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+        )
+        output_str = add_review_comments(yaml_str, report)
+
+        if output_path:
+            with open(output_path, "w") as f:
+                f.write(output_str)
+            print(
+                f"Wrote migrated values to {output_path}",
+                file=sys.stderr,
+            )
+        else:
+            print(output_str)
+
+    return report.to_dict(), report
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Migrate RHDH Helm chart values from 1.x to 2.x structure.",
     )
     parser.add_argument(
         "input",
-        help="Path to 1.x values.yaml (use '-' for stdin)",
+        nargs="+",
+        help="Path(s) to 1.x values.yaml file(s) (use '-' for stdin). "
+        "Multiple files are migrated independently, preserving file "
+        "separation. Your original files are never modified.",
     )
     parser.add_argument(
         "-o", "--output",
-        help="Path to write the migrated 2.x values file (default: stdout). "
-        "Your original input file is never modified.",
+        help="Output path: a file when migrating a single input, or a "
+        "directory (created if needed) when migrating multiple inputs. "
+        "Defaults to stdout for a single input.",
     )
     parser.add_argument(
         "--report",
@@ -1030,70 +1087,107 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    # Read input
-    try:
-        if args.input == "-":
-            raw = sys.stdin.read()
-        else:
-            with open(args.input) as f:
-                raw = f.read()
-    except (FileNotFoundError, PermissionError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
+    inputs: list[str] = args.input
+    multi = len(inputs) > 1
 
-    try:
-        old_data = yaml.safe_load(raw)
-    except yaml.YAMLError as e:
-        print(f"Error parsing YAML: {e}", file=sys.stderr)
-        return 2
-
-    if not isinstance(old_data, dict):
-        print("Error: input must be a YAML mapping (dict)", file=sys.stderr)
-        return 2
-
-    # Run migration
-    new_data, report = migrate(old_data)
-
-    # Output
-    if args.json:
-        print(json.dumps(report.to_dict(), indent=2))
-    else:
-        yaml_str = yaml.dump(
-            new_data,
-            default_flow_style=False,
-            sort_keys=False,
-            allow_unicode=True,
+    if multi and not args.output:
+        print(
+            "Error: -o/--output directory is required when migrating "
+            "multiple files",
+            file=sys.stderr,
         )
-        output_str = add_review_comments(yaml_str, report)
+        return 2
 
-        if args.output:
-            with open(args.output, "w") as f:
-                f.write(output_str)
-            print(
-                f"Wrote migrated values to {args.output}",
-                file=sys.stderr,
-            )
+    if multi and "-" in inputs:
+        print(
+            "Error: stdin ('-') cannot be combined with other input files",
+            file=sys.stderr,
+        )
+        return 2
+
+    if multi and args.output:
+        os.makedirs(args.output, exist_ok=True)
+
+    any_review = False
+    all_reports: list[dict] = []
+
+    for input_path in inputs:
+        try:
+            old_data = _read_yaml(input_path)
+        except (FileNotFoundError, PermissionError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 2
+        except yaml.YAMLError as e:
+            print(f"Error parsing YAML: {e}", file=sys.stderr)
+            return 2
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 2
+
+        if multi:
+            out_path = os.path.join(args.output, os.path.basename(input_path))
         else:
-            print(output_str)
+            out_path = args.output
 
-    # Write report
+        report_dict, report = _migrate_one(
+            input_path, old_data, out_path, args.json,
+        )
+        report_dict["file"] = input_path
+        all_reports.append(report_dict)
+        if report.has_review_items:
+            any_review = True
+
+    # Write combined report
+    combined_report = all_reports[0] if len(all_reports) == 1 else {
+        "files": all_reports,
+        "summary": {
+            "total_files": len(all_reports),
+            "total_deterministic": sum(
+                r["summary"]["total_deterministic"] for r in all_reports
+            ),
+            "total_removed": sum(
+                r["summary"]["total_removed"] for r in all_reports
+            ),
+            "total_review": sum(
+                r["summary"]["total_review"] for r in all_reports
+            ),
+            "total_warnings": sum(
+                r["summary"]["total_warnings"] for r in all_reports
+            ),
+            "total_unknown": sum(
+                r["summary"]["total_unknown"] for r in all_reports
+            ),
+            "needs_review": any_review,
+        },
+    }
     if args.report:
         with open(args.report, "w") as f:
-            json.dump(report.to_dict(), f, indent=2)
+            json.dump(combined_report, f, indent=2)
         print(f"Wrote report to {args.report}", file=sys.stderr)
 
     # Print summary to stderr
-    summary = report.to_dict()["summary"]
-    print(
-        f"\nMigration summary: "
-        f"{summary['total_deterministic']} keys migrated, "
-        f"{summary['total_removed']} removed, "
-        f"{summary['total_review']} areas for review, "
-        f"{summary['total_unknown']} unknown upstream keys",
-        file=sys.stderr,
-    )
+    if multi:
+        s = combined_report["summary"]
+        print(
+            f"\nMigration summary ({s['total_files']} files): "
+            f"{s['total_deterministic']} keys migrated, "
+            f"{s['total_removed']} removed, "
+            f"{s['total_review']} areas for review, "
+            f"{s['total_unknown']} unknown upstream keys",
+            file=sys.stderr,
+        )
+    else:
+        summary = all_reports[0]["summary"]
+        print(
+            f"\nMigration summary: "
+            f"{summary['total_deterministic']} keys migrated, "
+            f"{summary['total_removed']} removed, "
+            f"{summary['total_review']} areas for review, "
+            f"{summary['total_unknown']} unknown upstream keys",
+            file=sys.stderr,
+        )
 
-    return 1 if report.has_review_items else 0
+    return 1 if any_review else 0
 
 
 if __name__ == "__main__":
