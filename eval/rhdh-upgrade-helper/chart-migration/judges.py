@@ -62,7 +62,7 @@ def check_deterministic_mappings(
     **kwargs,
 ) -> dict:
     """Verify all expected deterministic mappings were applied."""
-    fixture = input_data.get("fixture", "simple-1x-values.yaml")
+    fixture = input_data.get("fixture", "simple-1y-values.yaml")
     expected_mappings = annotations.get("expected_mappings", {})
 
     report, output_data, _ = _run_migration(fixture)
@@ -100,7 +100,7 @@ def check_ambiguous_detection(
     **kwargs,
 ) -> dict:
     """Verify expected ambiguous areas are flagged, not silently transformed."""
-    fixture = input_data.get("fixture", "complex-1x-values.yaml")
+    fixture = input_data.get("fixture", "complex-1y-values.yaml")
     expected_areas = annotations.get("expected_ambiguous_areas", [])
 
     report, _, raw_output = _run_migration(fixture)
@@ -125,7 +125,7 @@ def check_removed_values(
     **kwargs,
 ) -> dict:
     """Verify removed values are excluded from output and listed in report."""
-    fixture = input_data.get("fixture", "complex-1x-values.yaml")
+    fixture = input_data.get("fixture", "complex-1y-values.yaml")
     expected_removed = annotations.get("expected_removed", [])
 
     report, output_data, _ = _run_migration(fixture)
@@ -157,7 +157,7 @@ def check_no_data_loss(
     **kwargs,
 ) -> dict:
     """Verify no customer values are silently dropped."""
-    fixture = input_data.get("fixture", "simple-1x-values.yaml")
+    fixture = input_data.get("fixture", "simple-1y-values.yaml")
 
     report, output_data, _ = _run_migration(fixture)
 
@@ -191,7 +191,7 @@ def check_valid_yaml(
     **kwargs,
 ) -> dict:
     """Verify the output is valid YAML."""
-    fixture = input_data.get("fixture", "simple-1x-values.yaml")
+    fixture = input_data.get("fixture", "simple-1y-values.yaml")
 
     _, _, raw_output = _run_migration(fixture)
 

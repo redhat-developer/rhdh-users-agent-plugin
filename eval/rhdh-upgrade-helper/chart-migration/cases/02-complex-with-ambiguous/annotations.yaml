@@ -1,6 +1,6 @@
 category: ambiguous
 rationale: >
-  Complex 1.x values with ingress, args, extraEnvFrom, auth secret, init containers,
+  Complex 1.y values with ingress, args, extraEnvFrom, auth secret, init containers,
   networkPolicy, Lightspeed/IA, and Orchestrator. All ambiguous areas should be
   flagged with MIGRATION-REVIEW markers.
 expected_ambiguous_areas:

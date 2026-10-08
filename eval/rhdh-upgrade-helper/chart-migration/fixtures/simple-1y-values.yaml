@@ -1,4 +1,4 @@
-# Simple 1.x values file with deterministic mappings only
+# Simple 1.y values file with deterministic mappings only
 upstream:
   backstage:
     image:

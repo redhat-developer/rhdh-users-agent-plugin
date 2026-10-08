@@ -1,5 +1,0 @@
-# Edge case: minimal 1.x values with almost nothing set
-upstream:
-  backstage:
-    image:
-      tag: "1.10"

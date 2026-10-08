@@ -35,7 +35,7 @@ This skill uses two data sources:
 
 3. **Known bug data** — For each plugin in your config, the skill searches the RHDHBUGS Jira project for open bugs affecting that plugin in the target release. Also queries GitHub Issues on `redhat-developer/rhdh` for community-reported upgrade issues. If Jira is not accessible, falls back to GitHub Issues and release notes only.
 
-4. **Chart migration data** — For major version upgrades (1.x → 2.x), the chart values migration reference (`references/chart-migration-1x-2x.md`) provides deterministic key mappings and ambiguous area guidance. The migration script (`scripts/migrate-chart-values.py`) automates mechanical translations and flags areas needing AI-assisted resolution.
+4. **Chart migration data** — For major version upgrades (1.y → 2.y), the chart values migration reference (`references/chart-migration-1y-2y.md`) provides deterministic key mappings and ambiguous area guidance. The migration script (`scripts/migrate-chart-values.py`) automates mechanical translations and flags areas needing AI-assisted resolution.
 
 The skill correlates these to answer: "Of all the changes in the target release, which ones actually affect MY setup?"
 
@@ -55,7 +55,7 @@ All config files are scanned for embedded secrets before processing. See `refere
 <routing>
 | Condition | Workflow |
 |-----------|----------|
-| Major version upgrade (`--from` 1.x, `--to` 2.x) with Helm values file | `workflows/chart-migration.md` (chart values migration + upgrade assessment) |
+| Major version upgrade (`--from` 1.y, `--to` 2.y) with Helm values file | `workflows/chart-migration.md` (chart values migration + upgrade assessment) |
 | Config files resolved (via `.rhdh-upgrade-helper.yaml`, `--config`, or `--config-path`) | `workflows/full-report.md` (config-driven assessment) |
 | No config files resolved | `workflows/interactive.md` (ask intake questions, then assess) |
 | "help", "explain", "how" | `workflows/help.md` |
@@ -78,7 +78,7 @@ All config files are scanned for embedded secrets before processing. See `refere
 | `references/rhdh-upgrade-helper-config.md` | `.rhdh-upgrade-helper.yaml` format, resolution order, file type auto-detection, Helm and Operator examples. |
 | `references/config-analysis.md` | How to parse customer config files — content-based auto-detection for Helm values, app-config, dynamic-plugins, and Backstage CR. |
 | `references/rhdh-architecture.md` | RHDH architecture context — what actually breaks on upgrade vs. common false positives. |
-| `references/chart-migration-1x-2x.md` | Chart values migration tables for 1.x→2.x: deterministic mappings, ambiguous areas, behavioral changes, removed/new values. |
+| `references/chart-migration-1y-2y.md` | Chart values migration tables for 1.y→2.y: deterministic mappings, ambiguous areas, behavioral changes, removed/new values. |
 | `references/release-notes/{X.Y}.md` | Per-release notes (new features, breaking changes, deprecated/removed features, known issues). One file per release. |
 </reference_index>
 
@@ -86,7 +86,7 @@ All config files are scanned for embedded secrets before processing. See `refere
 
 | Workflow | Purpose | Data Sources Used |
 |----------|---------|-------------------|
-| `workflows/chart-migration.md` | AI-assisted chart values migration for 1.x→2.x upgrades | Migration script + chart-migration-1x-2x reference + AI resolution |
+| `workflows/chart-migration.md` | AI-assisted chart values migration for 1.y→2.y upgrades | Migration script + chart-migration-1y-2y reference + AI resolution |
 | `workflows/full-report.md` | Config-driven upgrade assessment with line-level migration steps | Config analysis + product context |
 | `workflows/interactive.md` | Guided Q&A to build environment profile, then runs full assessment | Intake questions + product context |
 | `workflows/help.md` | Explain the skill and its capabilities | None |

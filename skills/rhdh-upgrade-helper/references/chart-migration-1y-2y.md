@@ -1,9 +1,9 @@
-# Chart Migration: RHDH 1.x to 2.x Values Structure
+# Chart Migration: RHDH 1.y to 2.y Values Structure
 
 The downstream RHDH Helm chart (`redhat-developer-hub` at `charts.openshift.io`) keeps the
-same name across major versions. What changes is the **values structure**: the 1.x chart
+same name across major versions. What changes is the **values structure**: the 1.y chart
 nested values under `upstream.backstage.*`, `global.*`, and `route.*` because it wrapped the
-upstream Backstage subchart. The 2.x chart owns all templates directly and flattens
+upstream Backstage subchart. The 2.y chart owns all templates directly and flattens
 configuration to root-level keys.
 
 Customers cannot pass their old values file to the new chart version directly. They must
@@ -592,7 +592,7 @@ images but do **not** affect dynamic plugin references (`oci://` or `ref://` in
 
 ---
 
-## Removed values (no 2.x equivalent)
+## Removed values (no 2.y equivalent)
 
 | Old path | Notes |
 |----------|-------|

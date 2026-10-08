@@ -29,7 +29,7 @@ Amplifiers reduce the base score further. Each amplifier applies a percentage re
 | Deprecated auth resolver | -20% | Customer's auth config uses a resolver name deprecated between releases. Login may fail after upgrade. |
 | Large plugin version jump | -15% each | A configured plugin has 3+ minor version jump between releases. Higher chance of breaking API changes. Max 2 plugins counted. |
 | Support level downgrade | -10% each | A configured plugin's support level dropped (e.g., `generally-available` → `tech-preview` or `community`). |
-| Removed chart values | -15% each | A chart value the customer uses has no 2.x equivalent (`installDir`, `containerPorts.backend`, `diagnosticMode`). |
+| Removed chart values | -15% each | A chart value the customer uses has no 2.y equivalent (`installDir`, `containerPorts.backend`, `diagnosticMode`). |
 
 **Formula:** `amplifier_penalty = base * (1 - 1/(1 + sum(amplifier_rates)))`
 

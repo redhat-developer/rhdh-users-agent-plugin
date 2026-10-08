@@ -1,6 +1,6 @@
 category: edge
 rationale: >
-  Minimal 1.x values with only an image tag. Should produce a minimal 2.x output
+  Minimal 1.y values with only an image tag. Should produce a minimal 2.y output
   with no ambiguous areas and no errors.
 expected_mappings:
   image.tag: "1.10"

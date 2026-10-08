@@ -1,5 +1,5 @@
 name: rhdh-upgrade-helper-chart-migration
-description: Verify the chart values migration script correctly transforms 1.x values to 2.x structure.
+description: Verify the chart values migration script correctly transforms 1.y values to 2.y structure.
 
 execution:
   mode: case

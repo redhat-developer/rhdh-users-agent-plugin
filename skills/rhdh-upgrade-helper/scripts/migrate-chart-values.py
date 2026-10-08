@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Migrate RHDH Helm chart values from 1.x to 2.x structure.
+"""Migrate RHDH Helm chart values from 1.y to 2.y structure.
 
 Applies deterministic key mappings and flags ambiguous areas that need
 AI-assisted or manual resolution. Original input files are never
@@ -45,7 +45,7 @@ except ImportError:
 # Deterministic mapping tables
 # ---------------------------------------------------------------------------
 # Each entry: (old_dotpath, new_dotpath, notes)
-# A new_dotpath of None means the value is removed (no 2.x equivalent).
+# A new_dotpath of None means the value is removed (no 2.y equivalent).
 
 DETERMINISTIC_MAPPINGS: list[tuple[str, str | None, str]] = [
     # Container image
@@ -376,7 +376,7 @@ def flatten_keys(data: dict, prefix: str = "") -> list[str]:
 
 
 def handle_ingress(old_data: dict) -> tuple[dict, list[str]]:
-    """Transform 1.x ingress to 2.x structure."""
+    """Transform 1.y ingress to 2.y structure."""
     ingress_data, found = deep_get(old_data, "upstream.ingress")
     if not found or not isinstance(ingress_data, dict):
         return {}, []
@@ -614,7 +614,7 @@ def handle_lightspeed(old_data: dict) -> tuple[dict, list[str]]:
         val, exists = deep_get(ls_data, rk)
         if exists:
             warnings.append(
-                f"global.lightspeed.{rk} is removed in 2.x (hardcoded or no longer needed)"
+                f"global.lightspeed.{rk} is removed in 2.y (hardcoded or no longer needed)"
             )
 
     return ia, warnings
@@ -984,13 +984,13 @@ def add_review_comments(yaml_str: str, report: MigrationReport) -> str:
 
     if report.review:
         header_comments.append("# ================================================================")
-        header_comments.append("# MIGRATION-REVIEW: This file was auto-generated from 1.x values.")
+        header_comments.append("# MIGRATION-REVIEW: This file was auto-generated from 1.y values.")
         header_comments.append(f"# {len(report.applied)} keys migrated deterministically.")
         header_comments.append(
             f"# {len(report.review)} area(s) flagged for review (search for MIGRATION-REVIEW)."
         )
         if report.removed:
-            header_comments.append(f"# {len(report.removed)} key(s) removed (no 2.x equivalent).")
+            header_comments.append(f"# {len(report.removed)} key(s) removed (no 2.y equivalent).")
         if report.unknown_upstream_keys:
             header_comments.append(
                 f"# {len(report.unknown_upstream_keys)} unknown upstream key(s) carried over with warnings."
@@ -1042,7 +1042,7 @@ def add_review_comments(yaml_str: str, report: MigrationReport) -> str:
 
     if report.removed:
         lines.append("")
-        lines.append("# Removed values (no 2.x equivalent):")
+        lines.append("# Removed values (no 2.y equivalent):")
         for item in report.removed:
             lines.append(f"#   {item['old']} — {item['notes']}")
 
@@ -1108,12 +1108,12 @@ def _migrate_one(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Migrate RHDH Helm chart values from 1.x to 2.x structure.",
+        description="Migrate RHDH Helm chart values from 1.y to 2.y structure.",
     )
     parser.add_argument(
         "input",
         nargs="+",
-        help="Path(s) to 1.x values.yaml file(s) (use '-' for stdin). "
+        help="Path(s) to 1.y values.yaml file(s) (use '-' for stdin). "
         "Multiple files are migrated independently, preserving file "
         "separation. Your original files are never modified.",
     )

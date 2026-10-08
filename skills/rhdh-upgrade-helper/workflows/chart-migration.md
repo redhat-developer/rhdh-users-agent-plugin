@@ -1,4 +1,4 @@
-# Workflow: Chart Migration (1.x to 2.x)
+# Workflow: Chart Migration (1.y to 2.y)
 
 This workflow handles RHDH Helm chart major version upgrades where the values structure
 changes. It combines a deterministic migration script with AI-assisted resolution of
@@ -7,7 +7,7 @@ ambiguous areas.
 <required_reading>
 Read these references before proceeding:
 
-- `references/chart-migration-1x-2x.md` — mapping tables and ambiguous area guidance
+- `references/chart-migration-1y-2y.md` — mapping tables and ambiguous area guidance
 - `references/secrets-detection.md` — secret scanning patterns
 - `references/output-format.md` — report template (for the final combined report)
 - `references/rhdh-local.md` — RHDH Local detection and recommendation
@@ -25,7 +25,7 @@ Read these references before proceeding:
    - Ask the user for the file path
 
 If no values file can be found, inform the user:
-"Chart migration requires your 1.x Helm values file. Provide it with `--config ./values.yaml`
+"Chart migration requires your 1.y Helm values file. Provide it with `--config ./values.yaml`
 or export from a running release: `helm get values <release> -n <ns> -o yaml > old-values.yaml`"
 
 ## Step 1: Secrets Scan
@@ -36,7 +36,7 @@ Before any processing, scan the values file for embedded secrets per
 ## Step 2: Run Deterministic Migration
 
 The migration script **never modifies the original values file**. It reads the
-1.x file and writes a separate draft 2.x file for the customer to inspect and
+1.y file and writes a separate draft 2.y file for the customer to inspect and
 validate before using it in an upgrade.
 
 Execute the migration script on the user's values file(s). If the customer uses
@@ -48,21 +48,21 @@ SKILL_DIR="$(dirname "$(dirname "$0")")"  # or the installed skill directory
 
 # Single file
 python3 "$SKILL_DIR/scripts/migrate-chart-values.py" "$VALUES_FILE" \
-  -o /tmp/rhdh-2x-values-draft.yaml \
+  -o /tmp/rhdh-2y-values-draft.yaml \
   --report /tmp/rhdh-migration-report.json
 
 # Multiple files — -o must be a directory
 python3 "$SKILL_DIR/scripts/migrate-chart-values.py" $VALUES_FILES \
   --to "$TARGET_VERSION" \
-  -o /tmp/rhdh-2x-values-draft/ \
+  -o /tmp/rhdh-2y-values-draft/ \
   --report /tmp/rhdh-migration-report.json
 
 MIGRATION_EXIT=$?
 ```
 
 Read the outputs:
-- Single file: `/tmp/rhdh-2x-values-draft.yaml` — the draft 2.x values with MIGRATION-REVIEW markers
-- Multiple files: `/tmp/rhdh-2x-values-draft/<name>-<version>.yaml` — one draft per input file (e.g., `base-2.1.yaml`)
+- Single file: `/tmp/rhdh-2y-values-draft.yaml` — the draft 2.y values with MIGRATION-REVIEW markers
+- Multiple files: `/tmp/rhdh-2y-values-draft/<name>-<version>.yaml` — one draft per input file (e.g., `base-2.1.yaml`)
 - `/tmp/rhdh-migration-report.json` — structured report of all transformations (combined across files when multiple)
 
 Present a summary to the user:
@@ -71,7 +71,7 @@ Present a summary to the user:
 ## Chart Values Migration: RHDH {from} → {to}
 
 **Deterministic mappings applied:** {N} keys migrated automatically
-**Removed values:** {M} keys with no 2.x equivalent
+**Removed values:** {M} keys with no 2.y equivalent
 **Areas requiring review:** {R} (listed below)
 **Unknown upstream keys:** {U} carried over with warnings
 ```
@@ -81,15 +81,15 @@ If `MIGRATION_EXIT == 0` (no review needed), skip to Step 4.
 ## Step 3: AI-Assisted Resolution of Ambiguous Areas
 
 For each review item in the migration report, walk the user through the resolution.
-Read the corresponding section of `references/chart-migration-1x-2x.md` for guidance.
+Read the corresponding section of `references/chart-migration-1y-2y.md` for guidance.
 
 ### Resolution protocol
 
 For each flagged area:
 
-1. **Show the original 1.x values** for that section (from the user's input file)
+1. **Show the original 1.y values** for that section (from the user's input file)
 2. **Explain what changed** — one paragraph, plain language, no internal jargon
-3. **Show the proposed 2.x equivalent** — the draft output from the script
+3. **Show the proposed 2.y equivalent** — the draft output from the script
 4. **Flag any manual actions** — things the user must do outside the values file
    (e.g., create a secret, add NetworkPolicy rules)
 5. **Ask for confirmation**: "Does this look correct? Adjust anything?"
@@ -134,7 +134,7 @@ If `initContainerImage` and `createDBJobImage` differed, ask which to use.
 
 ### After all areas resolved
 
-Apply the user's confirmed changes to the draft file. The final 2.x values file should
+Apply the user's confirmed changes to the draft file. The final 2.y values file should
 have no remaining `MIGRATION-REVIEW` markers.
 
 ## Step 4: Behavioral Change Warnings
@@ -186,14 +186,14 @@ If only the Helm values file was provided, produce a standalone chart migration 
 
 > **Migration status:** {Complete | Complete with manual actions}
 > **Keys migrated:** {N} deterministic + {R} reviewed
-> **Removed:** {M} (no 2.x equivalent)
+> **Removed:** {M} (no 2.y equivalent)
 > **Manual actions required:** {count}
 
 ---
 
 ### Deterministic Migrations Applied
 
-{N} values keys automatically translated to the 2.x structure.
+{N} values keys automatically translated to the 2.y structure.
 No action needed for these.
 
 ### Reviewed and Confirmed
@@ -224,7 +224,7 @@ helm upgrade --install <release> redhat-developer/redhat-developer-hub -n <names
 
 ### Migrated Values File
 
-The migrated 2.x values file has been written to: `{output-path}`
+The migrated 2.y values file has been written to: `{output-path}`
 ```
 
 ### RHDH Local recommendation
@@ -236,7 +236,7 @@ Before the upgrade checklist, check for RHDH Local per `references/rhdh-local.md
 ## Report rules
 
 - Customer-facing language — no internal jargon
-- Every change traces to a specific mapping from `references/chart-migration-1x-2x.md`
+- Every change traces to a specific mapping from `references/chart-migration-1y-2y.md`
 - No secrets echoed in output — apply `[REDACTED]` per `references/secrets-detection.md`
 - Show the exact file path of the migrated values file
 - Include `helm template` validation command
