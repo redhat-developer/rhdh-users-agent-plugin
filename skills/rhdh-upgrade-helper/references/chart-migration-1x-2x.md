@@ -7,7 +7,9 @@ upstream Backstage subchart. The 2.x chart owns all templates directly and flatt
 configuration to root-level keys.
 
 Customers cannot pass their old values file to the new chart version directly. They must
-migrate values first, then `helm upgrade` the release in place.
+migrate values first, then `helm upgrade` the release in place. The migration script
+produces a **separate output file** — the original values file is never modified, so
+customers can inspect and validate the draft before using it.
 
 Source: [upstream migration guide](https://github.com/redhat-developer/rhdh-chart/blob/release-2.1/charts/rhdh/docs/migration-from-backstage-chart.md) (RHIDP-16514).
 

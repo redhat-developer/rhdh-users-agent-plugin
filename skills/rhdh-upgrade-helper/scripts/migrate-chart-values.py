@@ -2,11 +2,13 @@
 """Migrate RHDH Helm chart values from 1.x to 2.x structure.
 
 Applies deterministic key mappings and flags ambiguous areas that need
-AI-assisted or manual resolution.
+AI-assisted or manual resolution. The original input file is never
+modified — output goes to a separate file (via -o) or stdout.
 
 Usage:
-    python3 migrate-chart-values.py old-values.yaml [-o new-values.yaml] [--report report.json]
-    cat old-values.yaml | python3 migrate-chart-values.py - [-o new-values.yaml]
+    python3 migrate-chart-values.py old-values.yaml -o new-values.yaml [--report report.json]
+    python3 migrate-chart-values.py old-values.yaml          # prints to stdout
+    cat old-values.yaml | python3 migrate-chart-values.py -   # reads from stdin
 
 Exit codes:
     0  All mappings deterministic (no review needed)
@@ -1014,7 +1016,8 @@ def main() -> int:
     )
     parser.add_argument(
         "-o", "--output",
-        help="Path to write the 2.x values file (default: stdout)",
+        help="Path to write the migrated 2.x values file (default: stdout). "
+        "Your original input file is never modified.",
     )
     parser.add_argument(
         "--report",

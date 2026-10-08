@@ -35,6 +35,10 @@ Before any processing, scan the values file for embedded secrets per
 
 ## Step 2: Run Deterministic Migration
 
+The migration script **never modifies the original values file**. It reads the
+1.x file and writes a separate draft 2.x file for the customer to inspect and
+validate before using it in an upgrade.
+
 Execute the migration script on the user's values file:
 
 ```bash
