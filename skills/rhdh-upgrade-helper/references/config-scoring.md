@@ -14,6 +14,8 @@ Start at 100 and subtract points for each finding category. The base score canno
 | Node.js version jump | -10 | Compare Node.js major versions. Same major = 0, +1 major = -5, +2 major = -10. |
 | Auth provider compatibility | -15 | Auth resolver changes between releases that affect the customer's configured providers. Each affected provider = -5, capped at -15. |
 | Custom plugins | -10 | Plugins in customer's config NOT in target release's `default.packages.yaml`. 1-2 = -3, 3-5 = -5, 6+ = -10. These need manual version compatibility checks. |
+| Chart value key migrations | -20 | Major version upgrade only. Count of ambiguous areas in the user's config that required AI-assisted resolution. 0 = 0, 1-2 = -5, 3-4 = -10, 5+ = -20. |
+| Major chart restructuring | -15 | Flat penalty when the RHDH major version differs (values structure changed from nested subchart layout to flat root-level keys). |
 
 **Formula:** `base = max(0, 100 - sum(deductions))`
 
@@ -27,6 +29,7 @@ Amplifiers reduce the base score further. Each amplifier applies a percentage re
 | Deprecated auth resolver | -20% | Customer's auth config uses a resolver name deprecated between releases. Login may fail after upgrade. |
 | Large plugin version jump | -15% each | A configured plugin has 3+ minor version jump between releases. Higher chance of breaking API changes. Max 2 plugins counted. |
 | Support level downgrade | -10% each | A configured plugin's support level dropped (e.g., `generally-available` → `tech-preview` or `community`). |
+| Removed chart values | -15% each | A chart value the customer uses has no 2.x equivalent (`installDir`, `containerPorts.backend`, `diagnosticMode`). |
 
 **Formula:** `amplifier_penalty = base * (1 - 1/(1 + sum(amplifier_rates)))`
 
@@ -43,6 +46,7 @@ Mitigators add points back to the adjusted score. Each mitigator adds a flat bon
 | Single-version upgrade | +10 | `--from` is the release immediately before `--to` (no skipped releases). |
 | All plugins exist in target | +10 | Every plugin in customer's config exists in the target release's `default.packages.yaml`. |
 | No artifact-source migration needed | +10 | Zero configured plugins require a local/OCI/NPM source-type transition according to target `spec.dynamicArtifact`. A valid bundled local path does not prevent this mitigator. |
+| Deterministic chart migration | +15 | Major version upgrade only. The migration script exited 0 — all chart value mappings were mechanical with no ambiguous areas. |
 
 **Formula:** `final = min(100, adjusted + sum(mitigator_bonuses))`
 

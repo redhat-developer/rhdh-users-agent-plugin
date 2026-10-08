@@ -1,0 +1,53 @@
+# Simple 1.x values file with deterministic mappings only
+upstream:
+  backstage:
+    image:
+      registry: registry.redhat.io
+      repository: rhdh/rhdh-hub-rhel9
+      tag: "1.10"
+    replicas: 2
+    podAnnotations:
+      sidecar.istio.io/inject: "true"
+    nodeSelector:
+      node-role.kubernetes.io/worker: ""
+    resources:
+      limits:
+        memory: 4Gi
+        cpu: "2"
+      requests:
+        memory: 2Gi
+        cpu: "1"
+  serviceAccount:
+    create: true
+    name: rhdh-sa
+  service:
+    type: ClusterIP
+    ports:
+      backend: 7007
+  postgresql:
+    enabled: true
+    image:
+      tag: "15.8"
+    auth:
+      existingSecret: rhdh-db-secret
+
+global:
+  clusterRouterBase: apps.ocp.example.com
+  host: rhdh.apps.ocp.example.com
+  dynamic:
+    includes:
+      - dynamic-plugins.default.yaml
+    plugins:
+      - package: ./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-gitlab-dynamic
+        disabled: false
+  auth:
+    backend:
+      enabled: true
+      value: supersecret123
+
+route:
+  enabled: true
+  host: rhdh.apps.ocp.example.com
+  tls:
+    enabled: true
+    termination: edge

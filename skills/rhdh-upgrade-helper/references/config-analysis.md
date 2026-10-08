@@ -60,14 +60,17 @@ For every config file (whether discovered by directory scan or provided individu
 
 | Content marker | Detected type | How to parse |
 |---|---|---|
-| Contains `global.dynamic.plugins` or `upstream.backstage` | **Helm values** | Extract nested config — see "Parsing Helm Values" below |
+| Contains `global.dynamic.plugins` or `upstream.backstage` | **Helm values (1.x)** | Extract nested config — see "Parsing Helm Values" below. If the target release is 2.x, route to `workflows/chart-migration.md` for values restructuring. |
+| Contains top-level `dynamicPlugins.plugins` or `dynamicPlugins.includes` (without `global.dynamic` or `upstream`) | **Helm values (2.x)** | Already in 2.x structure. Parse `dynamicPlugins.plugins` directly for plugin analysis. |
 | Top-level `plugins:` array with `package:` entries | **Dynamic plugins config** | Parse `plugins:` array directly |
 | Top-level `auth:`, `catalog:`, `backend:`, or `proxy:` keys | **App-config** | Parse as root-level Backstage configuration |
 | `kind: Backstage` or `apiVersion: rhdh.redhat.com` | **Backstage CR (Operator)** | Extract environment facts — see "Parsing Backstage CR" below |
 | Top-level `services:` with an `image:` containing `rhdh` | **Compose file** | Extract RHDH image version — see "Parsing Compose Files" below |
 | `KEY=VALUE` pairs (no YAML structure) | **Environment file** | Parse as env vars — see `references/env-vars.md` |
 
-When a file matches multiple markers (e.g., Helm values contain `auth:` under `upstream.backstage.appConfig`), use the most specific match. `global.dynamic.plugins` or `upstream.backstage` → Helm values takes precedence.
+When a file matches multiple markers (e.g., Helm values contain `auth:` under `upstream.backstage.appConfig`), use the most specific match. `global.dynamic.plugins` or `upstream.backstage` → Helm values (1.x) takes precedence.
+
+**1.x vs 2.x Helm values detection:** If a values file contains `upstream.backstage` or `global.dynamic.plugins`, it is 1.x format. If it contains top-level `dynamicPlugins` without the `global.dynamic` or `upstream` wrapper, it is 2.x format. When a 1.x values file is detected and the target release is 2.x, the skill should route through `workflows/chart-migration.md` to migrate the values structure before proceeding with plugin and config analysis.
 
 ## Merging Multiple App-Config Files
 

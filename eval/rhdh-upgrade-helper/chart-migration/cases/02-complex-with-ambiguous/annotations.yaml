@@ -1,0 +1,30 @@
+category: ambiguous
+rationale: >
+  Complex 1.x values with ingress, args, extraEnvFrom, auth secret, init containers,
+  networkPolicy, Lightspeed/IA, and Orchestrator. All ambiguous areas should be
+  flagged with MIGRATION-REVIEW markers.
+expected_ambiguous_areas:
+  - ingress
+  - args
+  - extraEnvFrom
+  - authSecret
+  - initContainers
+  - networkPolicy
+  - intelligentAssistant
+  - orchestrator
+expected_mappings:
+  image.registry: registry.redhat.io
+  replicaCount: 3
+  deploymentAnnotations:
+    deployment.kubernetes.io/revision: "1"
+  commandOverride: null
+  extraEnv: null
+  autoscaling.enabled: true
+  autoscaling.maxReplicas: 10
+  podDisruptionBudget.create: true
+  metrics.serviceMonitor.enabled: true
+  catalogIndex.image.tag: "1.10"
+expected_removed:
+  - upstream.backstage.containerPorts.backend
+  - upstream.backstage.installDir
+  - upstream.diagnosticMode

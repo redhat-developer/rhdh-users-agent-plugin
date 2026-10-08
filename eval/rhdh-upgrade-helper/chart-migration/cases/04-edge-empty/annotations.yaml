@@ -1,0 +1,8 @@
+category: edge
+rationale: >
+  Minimal 1.x values with only an image tag. Should produce a minimal 2.x output
+  with no ambiguous areas and no errors.
+expected_mappings:
+  image.tag: "1.10"
+expected_ambiguous_areas: []
+expected_removed: []
