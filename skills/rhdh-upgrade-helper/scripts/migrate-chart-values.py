@@ -924,7 +924,12 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
         handled_prefixes.add("orchestrator.sonataflowPlatform")
 
     # 2b. Post-migration warnings for image and air-gapped behavior
-    # Warn about digest/tag precedence when user sets image tags
+    # Handle digest/tag interaction when user sets image tags.
+    # The downstream chart ships images with explicit digests by default.
+    # When both tag and digest are set, the chart renders tag@digest, which
+    # can fail to resolve if they don't match.
+    DEFAULT_REGISTRY = "registry.redhat.io"
+    DEFAULT_REPOSITORY = "rhdh/rhdh-hub-rhel10"
     image_tag_paths = [
         "image.tag",
         "postgresql.image.tag",
@@ -936,14 +941,43 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
         if has_tag and tag_val:
             digest_path = tag_path.rsplit(".", 1)[0] + ".digest"
             digest_val, has_digest = deep_get(new_data, digest_path)
-            if not has_digest or digest_val:
-                report.warnings.append(
-                    f"{tag_path} is set but {digest_path} is not cleared. "
-                    f"The downstream chart ships images with explicit digests by default. "
-                    f"When both are set, the chart renders tag@digest, which can fail to "
-                    f"resolve at pull time if they don't match (the chart's default digest "
-                    f'is merged by Helm). Either set `{digest_path}: ""` to clear the '
-                    f"default, or set it to the correct digest for your tag."
+            if has_digest and digest_val == "":
+                continue
+            prefix = tag_path.rsplit(".", 1)[0]
+            registry_val, _ = deep_get(new_data, f"{prefix}.registry")
+            repo_val, _ = deep_get(new_data, f"{prefix}.repository")
+            is_custom_image = (registry_val and registry_val != DEFAULT_REGISTRY) or (
+                repo_val and repo_val != DEFAULT_REPOSITORY
+            )
+            if is_custom_image:
+                deep_set(new_data, digest_path, "")
+                report.review.append(
+                    {
+                        "area": "imageDigest",
+                        "description": (
+                            f"{tag_path} is set with a non-default image "
+                            f"(registry={registry_val}, repository={repo_val}). "
+                            f'Set {digest_path} to "" to prevent the chart\'s '
+                            f"default digest from being merged by Helm. Verify "
+                            f"this is correct, or set the digest to match your tag."
+                        ),
+                        "mapped_to": digest_path,
+                    }
+                )
+            else:
+                report.review.append(
+                    {
+                        "area": "imageDigest",
+                        "description": (
+                            f"{tag_path} is set. The downstream chart ships images "
+                            f"with explicit digests by default. When both are set, "
+                            f"the chart renders tag@digest, which can fail to resolve "
+                            f"at pull time if they don't match. Either set "
+                            f'`{digest_path}: ""` to clear the default, or set it '
+                            f"to the correct digest for your tag."
+                        ),
+                        "mapped_to": digest_path,
+                    }
                 )
 
     # Warn about air-gapped plugin limitation
