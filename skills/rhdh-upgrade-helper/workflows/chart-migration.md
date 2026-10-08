@@ -10,7 +10,6 @@ Read these references before proceeding:
 - `references/chart-migration-1y-2y.md` — mapping tables and ambiguous area guidance
 - `references/secrets-detection.md` — secret scanning patterns
 - `references/output-format.md` — report template (for the final combined report)
-- `references/rhdh-local.md` — RHDH Local detection and recommendation
 </required_reading>
 
 ## Step 0: Validate prerequisites
@@ -254,11 +253,16 @@ helm upgrade --install <release> redhat-developer-hub --repo https://charts.open
 The migrated 2.y values file has been written to: `{output-path}`
 ```
 
-### RHDH Local recommendation
+### RHDH Local
 
-Before the upgrade checklist, check for RHDH Local per `references/rhdh-local.md`:
-- If found: "RHDH Local detected — use it to validate your migrated values before deploying."
-- If not found: Include the full RHDH Local recommendation.
+Do **not** recommend RHDH Local for validating Helm values files. RHDH Local uses
+`podman compose` with app-config files — it cannot process Helm values or resolve
+Go template expressions (e.g., `{{ include "rhdh.hostname" . }}`). The correct
+validation path for chart migrations is `helm template` (shown above).
+
+RHDH Local is still relevant when the customer also has app-config files to
+validate — in that case, defer to `workflows/full-report.md` which includes the
+RHDH Local recommendation for the app-config portion.
 
 ## Report rules
 
