@@ -166,10 +166,27 @@ Regardless of whether ambiguous areas existed, warn about behavioral changes:
    mirrored separately and their references updated individually in your dynamic plugins
    configuration."
 
-6. **Schema validation**: Recommend running `helm template` before upgrading:
-   ```bash
-   helm template <release> redhat-developer/redhat-developer-hub -f new-values.yaml
-   ```
+6. **Schema validation**: Recommend running `helm template` before upgrading.
+   If multiple values files were migrated, pass them in the same order the customer
+   used with the 1.y chart (Helm merges values files in order — last wins).
+
+   Determine the chart source:
+   - **Official repo (preferred)**: Check if the target chart version is published at
+     `https://charts.openshift.io`. If so:
+     ```bash
+     # Single file
+     helm template <release> redhat-developer-hub --repo https://charts.openshift.io --version <chart-version> -f new-values.yaml
+     # Multiple files — same order as the original 1.y install
+     helm template <release> redhat-developer-hub --repo https://charts.openshift.io --version <chart-version> -f base-2.1.yaml -f prod-2.1.yaml
+     ```
+   - **Upstream repo (pre-GA or unreleased)**: If the chart version is not yet in
+     `charts.openshift.io`, determine the chart version from the upstream `Chart.yaml`
+     on the `release-{to}` branch (e.g.,
+     `https://github.com/redhat-developer/rhdh-chart/blob/release-{to}/charts/rhdh/Chart.yaml`),
+     or `main` if that branch doesn't exist. Then use the upstream Helm repo:
+     ```bash
+     helm template <release> redhat-developer-hub --repo https://redhat-developer.github.io/rhdh-chart --version <chart-version> -f new-values.yaml
+     ```
 
 ## Step 5: Produce combined report
 
@@ -210,16 +227,26 @@ No action needed for these.
 
 ### Pre-upgrade validation
 
-Run this command to validate the migrated values before upgrading:
+Validate the migrated values before upgrading. If multiple values files were
+migrated, pass them in the same order as the original 1.y install.
+
+If the chart version is published at `charts.openshift.io`:
 
 ```bash
-helm template <release> redhat-developer/redhat-developer-hub -f {output-file}
+helm template <release> redhat-developer-hub --repo https://charts.openshift.io --version {chart-version} -f {output-file(s)}
+```
+
+If not yet published, look up the chart version from the upstream `Chart.yaml`
+(`release-{to}` branch, or `main`) and use the upstream Helm repo:
+
+```bash
+helm template <release> redhat-developer-hub --repo https://redhat-developer.github.io/rhdh-chart --version {chart-version} -f {output-file(s)}
 ```
 
 Then upgrade:
 
 ```bash
-helm upgrade --install <release> redhat-developer/redhat-developer-hub -n <namespace> -f {output-file}
+helm upgrade --install <release> redhat-developer-hub --repo https://charts.openshift.io --version {chart-version} -n <namespace> -f {output-file(s)}
 ```
 
 ### Migrated values file
