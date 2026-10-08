@@ -780,10 +780,12 @@ def _scan_janus_refs(
                 {
                     "area": "janusIdpTemplate",
                     "description": (
-                        f"{path} contains Helm template reference(s): "
-                        f"{replacements}. The 2.y chart renamed internal "
-                        f"templates from janus-idp.* to rhdh.*. Review and "
-                        f"update these references."
+                        f"{path} references internal chart template(s): "
+                        f"{replacements}. These are internal to the chart "
+                        f"and may change between versions. Inspect the "
+                        f"chart's _helpers.tpl to confirm the current names "
+                        f"(pull the chart or ask the upgrade helper to check "
+                        f"for you)."
                     ),
                     "mapped_to": path,
                 }
