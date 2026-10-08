@@ -9,7 +9,7 @@ Usage:
     python3 migrate-chart-values.py values.yaml -o migrated.yaml [--report report.json]
     python3 migrate-chart-values.py values.yaml                   # prints to stdout
     cat values.yaml | python3 migrate-chart-values.py -            # reads from stdin
-    python3 migrate-chart-values.py base.yaml prod.yaml -o /tmp/migrated/  # per-file output
+    python3 migrate-chart-values.py base.yaml prod.yaml --to 2.1 -o /tmp/migrated/
 
 Multiple input files are migrated independently, preserving the
 customer's file organization. When multiple files are given, -o must
@@ -1031,6 +1031,7 @@ def _migrate_one(
     old_data: dict,
     output_path: str | None,
     json_mode: bool,
+    target_version: str | None = None,
 ) -> tuple[dict, MigrationReport]:
     """Migrate a single values file and write output. Returns (report_dict, report)."""
     new_data, report = migrate(old_data)
@@ -1045,6 +1046,11 @@ def _migrate_one(
             allow_unicode=True,
         )
         output_str = add_review_comments(yaml_str, report)
+        if target_version:
+            header = f"# Migrated from: {input_path} (target: RHDH {target_version})\n"
+        else:
+            header = f"# Migrated from: {input_path}\n"
+        output_str = header + output_str
 
         if output_path:
             with open(output_path, "w") as f:
@@ -1079,6 +1085,13 @@ def main() -> int:
     parser.add_argument(
         "--report",
         help="Path to write the JSON migration report",
+    )
+    parser.add_argument(
+        "--to",
+        metavar="VERSION",
+        help="Target RHDH version (e.g. 2.1). Used in multi-file output "
+        "filenames (base.yaml -> base-2.1.yaml). Falls back to "
+        "'-migrated' suffix if omitted.",
     )
     parser.add_argument(
         "--json",
@@ -1125,12 +1138,15 @@ def main() -> int:
             return 2
 
         if multi:
-            out_path = os.path.join(args.output, os.path.basename(input_path))
+            base = os.path.basename(input_path)
+            name, ext = os.path.splitext(base)
+            suffix = args.to if args.to else "migrated"
+            out_path = os.path.join(args.output, f"{name}-{suffix}{ext}")
         else:
             out_path = args.output
 
         report_dict, report = _migrate_one(
-            input_path, old_data, out_path, args.json,
+            input_path, old_data, out_path, args.json, args.to,
         )
         report_dict["file"] = input_path
         all_reports.append(report_dict)

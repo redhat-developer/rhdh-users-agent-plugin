@@ -53,6 +53,7 @@ python3 "$SKILL_DIR/scripts/migrate-chart-values.py" "$VALUES_FILE" \
 
 # Multiple files — -o must be a directory
 python3 "$SKILL_DIR/scripts/migrate-chart-values.py" $VALUES_FILES \
+  --to "$TARGET_VERSION" \
   -o /tmp/rhdh-2x-values-draft/ \
   --report /tmp/rhdh-migration-report.json
 
@@ -61,7 +62,7 @@ MIGRATION_EXIT=$?
 
 Read the outputs:
 - Single file: `/tmp/rhdh-2x-values-draft.yaml` — the draft 2.x values with MIGRATION-REVIEW markers
-- Multiple files: `/tmp/rhdh-2x-values-draft/<filename>.yaml` — one draft per input file
+- Multiple files: `/tmp/rhdh-2x-values-draft/<name>-<version>.yaml` — one draft per input file (e.g., `base-2.1.yaml`)
 - `/tmp/rhdh-migration-report.json` — structured report of all transformations (combined across files when multiple)
 
 Present a summary to the user:
