@@ -3,18 +3,20 @@
 
 Applies deterministic key mappings and flags ambiguous areas that need
 AI-assisted or manual resolution. Original input files are never
-modified — output goes to separate files (via -o) or stdout.
+modified — output is written next to the original with a versioned
+suffix (e.g. values.yaml → values-2.1.yaml).
 
 Usage:
-    python3 migrate-chart-values.py values.yaml -o migrated.yaml [--report report.json]
-    python3 migrate-chart-values.py values.yaml                   # prints to stdout
-    cat values.yaml | python3 migrate-chart-values.py -            # reads from stdin
-    python3 migrate-chart-values.py base.yaml prod.yaml --to 2.1 -o /tmp/migrated/
+    python3 migrate-chart-values.py values.yaml --to 2.1          # writes values-2.1.yaml next to the original
+    python3 migrate-chart-values.py values.yaml -o migrated.yaml  # explicit output path
+    python3 migrate-chart-values.py values.yaml -o -              # prints to stdout
+    cat values.yaml | python3 migrate-chart-values.py -            # reads from stdin, prints to stdout
+    python3 migrate-chart-values.py base.yaml prod.yaml --to 2.1  # each output next to its original
 
 Multiple input files are migrated independently, preserving the
-customer's file organization. When multiple files are given, -o must
-be a directory (created if needed); each output keeps its original
-filename.
+customer's file organization. When multiple files are given with -o,
+it must be a directory (created if needed); each output keeps its
+original filename with a versioned suffix.
 
 Exit codes:
     0  All mappings deterministic (no review needed)
@@ -1230,11 +1232,8 @@ def main() -> int:
         "--output",
         help="Output path: a file when migrating a single input, or a "
         "directory (created if needed) when migrating multiple inputs. "
-        "Defaults to stdout for a single input.",
-    )
-    parser.add_argument(
-        "--report",
-        help="Path to write the JSON migration report",
+        "When omitted, writes next to the original file with a versioned "
+        "suffix (e.g. values.yaml → values-2.1.yaml). Use '-' for stdout.",
     )
     parser.add_argument(
         "--to",
@@ -1252,13 +1251,6 @@ def main() -> int:
 
     inputs: list[str] = args.input
     multi = len(inputs) > 1
-
-    if multi and not args.output:
-        print(
-            "Error: -o/--output directory is required when migrating multiple files",
-            file=sys.stderr,
-        )
-        return 2
 
     if multi and "-" in inputs:
         print(
@@ -1286,13 +1278,21 @@ def main() -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 2
 
-        if multi:
+        if args.output == "-":
+            out_path = None
+        elif args.output and multi:
             base = os.path.basename(input_path)
             name, ext = os.path.splitext(base)
             suffix = args.to if args.to else "migrated"
             out_path = os.path.join(args.output, f"{name}-{suffix}{ext}")
-        else:
+        elif args.output:
             out_path = args.output
+        elif input_path == "-":
+            out_path = None
+        else:
+            name, ext = os.path.splitext(input_path)
+            suffix = args.to if args.to else "migrated"
+            out_path = f"{name}-{suffix}{ext}"
 
         report_dict, report = _migrate_one(
             input_path,
@@ -1306,39 +1306,18 @@ def main() -> int:
         if report.has_review_items:
             any_review = True
 
-    # Write combined report
-    combined_report = (
-        all_reports[0]
-        if len(all_reports) == 1
-        else {
-            "files": all_reports,
-            "summary": {
-                "total_files": len(all_reports),
-                "total_deterministic": sum(
-                    r["summary"]["total_deterministic"] for r in all_reports
-                ),
-                "total_removed": sum(r["summary"]["total_removed"] for r in all_reports),
-                "total_review": sum(r["summary"]["total_review"] for r in all_reports),
-                "total_warnings": sum(r["summary"]["total_warnings"] for r in all_reports),
-                "total_unknown": sum(r["summary"]["total_unknown"] for r in all_reports),
-                "needs_review": any_review,
-            },
-        }
-    )
-    if args.report:
-        with open(args.report, "w") as f:
-            json.dump(combined_report, f, indent=2)
-        print(f"Wrote report to {args.report}", file=sys.stderr)
-
     # Print summary to stderr
     if multi:
-        s = combined_report["summary"]
+        totals = {
+            k: sum(r["summary"][k] for r in all_reports)
+            for k in ("total_deterministic", "total_removed", "total_review", "total_unknown")
+        }
         print(
-            f"\nMigration summary ({s['total_files']} files): "
-            f"{s['total_deterministic']} keys migrated, "
-            f"{s['total_removed']} removed, "
-            f"{s['total_review']} areas for review, "
-            f"{s['total_unknown']} unknown upstream keys",
+            f"\nMigration summary ({len(all_reports)} files): "
+            f"{totals['total_deterministic']} keys migrated, "
+            f"{totals['total_removed']} removed, "
+            f"{totals['total_review']} areas for review, "
+            f"{totals['total_unknown']} unknown upstream keys",
             file=sys.stderr,
         )
     else:

@@ -89,29 +89,30 @@ validate before using it in an upgrade.
 
 Execute the migration script on the user's values file(s). If the customer uses
 multiple values files (e.g., base + environment overrides), pass them all — each
-is migrated independently and the output preserves the file separation:
+is migrated independently and the output preserves the file separation.
+
+By default, the script writes output **next to the original file** with a versioned
+suffix (e.g., `values.yaml` → `values-2.1.yaml`). No `-o` flag is needed:
 
 ```bash
-SKILL_DIR="$(dirname "$(dirname "$0")")"  # or the installed skill directory
-
-# Single file
+# Single file — output written next to the original
 python3 "$SKILL_DIR/scripts/migrate-chart-values.py" "$VALUES_FILE" \
-  -o /tmp/rhdh-2y-values-draft.yaml \
-  --report /tmp/rhdh-migration-report.json
+  --to "$TARGET_VERSION"
 
-# Multiple files — -o must be a directory
+# Multiple files — same default behavior, each output next to its original
+python3 "$SKILL_DIR/scripts/migrate-chart-values.py" $VALUES_FILES \
+  --to "$TARGET_VERSION"
+
+# Explicit output directory (overrides default)
 python3 "$SKILL_DIR/scripts/migrate-chart-values.py" $VALUES_FILES \
   --to "$TARGET_VERSION" \
-  -o /tmp/rhdh-2y-values-draft/ \
-  --report /tmp/rhdh-migration-report.json
+  -o /tmp/migrated/
 
 MIGRATION_EXIT=$?
 ```
 
-Read the outputs:
-- Single file: `/tmp/rhdh-2y-values-draft.yaml` — the draft 2.y values with MIGRATION-REVIEW markers
-- Multiple files: `/tmp/rhdh-2y-values-draft/<name>-<version>.yaml` — one draft per input file (e.g., `base-2.1.yaml`)
-- `/tmp/rhdh-migration-report.json` — structured report of all transformations (combined across files when multiple)
+The script prints the output path and a summary to stderr (e.g.,
+`Wrote migrated values to /path/to/values-2.1.yaml`).
 
 Present a summary to the user:
 
