@@ -70,7 +70,7 @@ For every config file (whether discovered by directory scan or provided individu
 
 When a file matches multiple markers (e.g., Helm values contain `auth:` under `upstream.backstage.appConfig`), use the most specific match. `global.dynamic.plugins` or `upstream.backstage` → Helm values (1.y) takes precedence.
 
-**1.y vs 2.y Helm values detection:** If a values file contains `upstream.backstage` or `global.dynamic.plugins`, it is 1.y format. If it contains top-level `dynamicPlugins` without the `global.dynamic` or `upstream` wrapper, it is 2.y format. When a 1.y values file is detected and the target release is 2.y, the skill should route through `workflows/chart-migration.md` to migrate the values structure before proceeding with plugin and config analysis.
+**1.y vs 2.y Helm values detection:** If a values file contains `upstream.backstage` or `global.dynamic.plugins`, it is 1.y format. If it contains top-level `dynamicPlugins` without the `global.dynamic` or `upstream` wrapper, it is 2.y format. When a 1.y values file is detected and the target release is 2.y (currently only 1.10 → 2.1 is supported), the skill should route through `workflows/chart-migration.md` to migrate the values structure before proceeding with plugin and config analysis.
 
 ## Merging Multiple App-Config Files
 

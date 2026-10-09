@@ -58,12 +58,13 @@ helm pull redhat-developer-hub --repo https://charts.openshift.io --version <pro
 In the upstream repo, product versions do **not** map directly to chart versions.
 The chart has its own versioning scheme. To resolve:
 
-- Product `2.1` (no patch) → use the `release-2.1` branch (or `main` if it doesn't exist).
-  Read the chart version from `Chart.yaml`:
+- Product `2.1` (no patch) → find the highest `2.1.*` tag in the repo (e.g., `2.1.1`).
+  Read the chart version from `Chart.yaml` at that tag:
   ```
-  https://github.com/redhat-developer/rhdh-chart/blob/release-2.1/charts/rhdh/Chart.yaml
+  https://github.com/redhat-developer/rhdh-chart/blob/2.1.1/charts/rhdh/Chart.yaml
   ```
-- Product `2.1.1` (with patch) → use the `2.1.1` tag in the repo.
+  Fall back to the `release-2.1` branch (or `main`) only if no tags exist yet.
+- Product `2.1.1` (with patch) → use the `2.1.1` tag directly.
   Read the chart version from `Chart.yaml` at that tag:
   ```
   https://github.com/redhat-developer/rhdh-chart/blob/2.1.1/charts/rhdh/Chart.yaml
@@ -104,7 +105,7 @@ python3 "$SKILL_DIR/scripts/migrate-chart-values.py" "$VALUES_FILE" \
 python3 "$SKILL_DIR/scripts/migrate-chart-values.py" $VALUES_FILES \
   --to "$TARGET_VERSION"
 
-# Explicit output directory (overrides default)
+# Explicit output directory (overrides default, which is the same folder as the input $VALUES_FILES)
 python3 "$SKILL_DIR/scripts/migrate-chart-values.py" $VALUES_FILES \
   --to "$TARGET_VERSION" \
   -o /tmp/migrated/

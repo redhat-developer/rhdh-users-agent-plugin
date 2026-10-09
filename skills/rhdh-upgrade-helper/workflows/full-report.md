@@ -113,7 +113,7 @@ echo "$RELEASE_VERSIONS"
 # e.g., references/release-notes/1.8.md says "upstream Backstage 1.42.5"
 ```
 
-**Major version handling (e.g., 1.y → 2.y):**
+**Major version handling (1.10 → 2.1):**
 
 - If the major version differs between FROM and TO, flag this as a **major version upgrade** in the report header
 - Major version upgrades may introduce fundamental architecture changes (e.g., frontend system migration, backend system migration) — surface these prominently
