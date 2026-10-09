@@ -7,7 +7,8 @@ ambiguous areas.
 <required_reading>
 Read these references before proceeding:
 
-- `references/chart-migration-1y-2y.md` — mapping tables and ambiguous area guidance
+- [Upstream migration guide](https://github.com/redhat-developer/rhdh-chart/blob/release-2.1/charts/rhdh/docs/migration-from-backstage-chart.md) — authoritative mapping tables, behavioral changes, chart-managed defaults inventory, before/after YAML examples
+- `references/chart-migration-1y-2y.md` — ambiguous area transformation algorithms, `.Values.*` rewriting rules, decomposed fields (skill-specific metadata not in the upstream guide)
 - `references/secrets-detection.md` — secret scanning patterns
 - `references/output-format.md` — report template (for the final combined report)
 </required_reading>
