@@ -22,6 +22,7 @@ Exit codes:
     0  All mappings deterministic (no review needed)
     1  Has ambiguous areas needing review (MIGRATION-REVIEW markers in output)
     2  Error (bad input, missing file, etc.)
+    3  Target version not supported by this script (skip, don't block)
 """
 
 from __future__ import annotations
@@ -43,6 +44,14 @@ except ImportError:
     )
     sys.exit(2)
 
+
+# ---------------------------------------------------------------------------
+# Supported target versions
+# ---------------------------------------------------------------------------
+# Only versions with tested mapping tables are supported. When the caller
+# passes a --to version not in this set, the script exits 3 (skip) so
+# the broader upgrade assessment can continue without blocking.
+SUPPORTED_VERSIONS: set[str] = {"2.1"}
 
 # ---------------------------------------------------------------------------
 # Deterministic mapping tables
@@ -1532,6 +1541,17 @@ def main() -> int:
         help="Output the report as JSON to stdout instead of YAML",
     )
     args = parser.parse_args()
+
+    # Check target version is supported
+    if args.to:
+        major_minor = ".".join(args.to.split(".")[:2])
+        if major_minor not in SUPPORTED_VERSIONS:
+            supported = ", ".join(sorted(SUPPORTED_VERSIONS))
+            print(
+                f"Chart migration not yet available for RHDH {args.to}. Supported: {supported}.",
+                file=sys.stderr,
+            )
+            return 3
 
     inputs: list[str] = args.input
     multi = len(inputs) > 1

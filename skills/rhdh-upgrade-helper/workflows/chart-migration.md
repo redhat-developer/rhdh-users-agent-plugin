@@ -126,6 +126,11 @@ Present a summary to the user:
 **Unknown upstream keys:** {U} carried over with warnings
 ```
 
+If `MIGRATION_EXIT == 3` (target version not supported by the script), inform the
+user that chart structure migration is not yet available for this version, then
+continue to Steps 4 and 5 — the rest of the upgrade assessment (behavioral
+warnings, plugin analysis, release notes) should not be blocked.
+
 If `MIGRATION_EXIT == 0` (no review needed), skip to Step 4.
 
 ## Step 3: AI-assisted resolution of ambiguous areas
