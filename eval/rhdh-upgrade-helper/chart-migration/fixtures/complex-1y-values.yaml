@@ -1,0 +1,175 @@
+# Complex 1.y values file with ambiguous areas
+upstream:
+  backstage:
+    image:
+      registry: registry.redhat.io
+      repository: rhdh/rhdh-hub-rhel9
+      tag: "1.10"
+    replicas: 3
+    annotations:
+      deployment.kubernetes.io/revision: "1"
+    command:
+      - node
+    args:
+      - "--max-old-space-size=8192"
+    extraEnvVars:
+      - name: LOG_LEVEL
+        value: debug
+      - name: NODE_OPTIONS
+        value: "--max-http-header-size=32768"
+    extraEnvVarsSecrets:
+      - rhdh-github-token
+      - rhdh-gitlab-token
+    extraEnvVarsCM:
+      - rhdh-feature-flags
+    extraVolumes:
+      - name: custom-certs
+        secret:
+          secretName: custom-ca-bundle
+    extraVolumeMounts:
+      - name: custom-certs
+        mountPath: /etc/pki/tls/certs/custom
+    initContainers:
+      - name: install-dynamic-plugins
+        resources:
+          limits:
+            memory: 2Gi
+        securityContext:
+          runAsNonRoot: true
+        env:
+          - name: NPM_CONFIG_REGISTRY
+            value: https://npm.internal.example.com
+      - name: custom-init
+        image: busybox:1.36
+        command: ["sh", "-c", "echo hello"]
+    resources:
+      limits:
+        memory: 8Gi
+        cpu: "4"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+    pdb:
+      create: true
+      minAvailable: 1
+    containerPorts:
+      backend: 7007
+    installDir: /opt/app-root/src
+  serviceAccount:
+    create: true
+    name: rhdh-sa
+    automountServiceAccountToken: true
+  service:
+    type: ClusterIP
+    ports:
+      backend: 7007
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    host: rhdh.example.com
+    path: /
+    extraHosts:
+      - name: rhdh-alt.example.com
+        path: /
+    tls:
+      enabled: true
+      secretName: rhdh-tls
+    extraTls:
+      - hosts:
+          - rhdh-alt.example.com
+        secretName: rhdh-alt-tls
+  networkPolicy:
+    enabled: true
+    ingressRules:
+      customRules:
+        - from:
+            - namespaceSelector:
+                matchLabels:
+                  team: platform
+    egressRules:
+      denyConnectionsToExternal: false
+  postgresql:
+    enabled: true
+    image:
+      tag: "15.8"
+    auth:
+      existingSecret: rhdh-db-secret
+  metrics:
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+      labels:
+        release: prometheus
+  diagnosticMode:
+    enabled: false
+  httpRoute:
+    enabled: false
+
+global:
+  clusterRouterBase: apps.ocp.example.com
+  host: rhdh.example.com
+  dynamic:
+    includes:
+      - dynamic-plugins.default.yaml
+    plugins:
+      - package: ./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-gitlab-dynamic
+        disabled: false
+      - package: oci://registry.access.redhat.com/rhdh/backstage-community-plugin-argocd@sha256:abc123
+        disabled: false
+  auth:
+    backend:
+      enabled: true
+      existingSecret: rhdh-auth-secret
+  lightspeed:
+    enabled: true
+    sidecar:
+      image: "quay.io/ai/lightspeed-service:1.5.0"
+      resources:
+        limits:
+          memory: 2Gi
+      imagePullPolicy: Always
+    configMaps:
+      - name: lightspeed-config
+      - name: lightspeed-stack
+      - name: lightspeed-profile
+    secret:
+      create: true
+      name: lightspeed-api-key
+    plugins:
+      - package: oci://registry.access.redhat.com/rhdh/lightspeed-plugin:1.0
+        disabled: false
+  catalogIndex:
+    image:
+      registry: registry.redhat.io
+      repository: rhdh/rhdh-catalog-index
+      tag: "1.10"
+
+route:
+  enabled: true
+  host: rhdh.apps.ocp.example.com
+  tls:
+    enabled: true
+    termination: edge
+    certificate: |
+      -----BEGIN CERTIFICATE-----
+      ...
+      -----END CERTIFICATE-----
+
+orchestrator:
+  sonataflowPlatform:
+    externalDBsecretRef: orch-db-secret
+    externalDBName: sonataflow
+    externalDBHost: postgres.internal.example.com
+    externalDBPort: "5432"
+    initContainerImage: "registry.redhat.io/rhdh/sonataflow-init:1.0"
+    createDBJobImage: "registry.redhat.io/rhdh/sonataflow-init:1.0"
+    dataIndexImage: "registry.redhat.io/rhdh/data-index:1.0"
+    jobServiceImage: "registry.redhat.io/rhdh/job-service:1.0"
+    dbCreationJobBackoffLimit: 6
+    dbCreationJobTTLSecondsAfterFinished: 600
+    dbCreationJobActiveDeadlineSeconds: 300

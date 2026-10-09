@@ -1,0 +1,8 @@
+category: removed
+rationale: >
+  Verify that values with no 2.y equivalent are removed from output and
+  reported in the migration report.
+expected_removed:
+  - upstream.backstage.containerPorts.backend
+  - upstream.backstage.installDir
+  - upstream.diagnosticMode
