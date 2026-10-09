@@ -837,6 +837,7 @@ class MigrationReport:
         self.review: list[dict[str, str]] = []
         self.warnings: list[str] = []
         self.unknown_upstream_keys: list[str] = []
+        self.commented_defaults: dict[str, list[Any]] = {}
 
     @property
     def has_review_items(self) -> bool:
@@ -949,9 +950,9 @@ def _fix_values_refs(data: Any, path: str, report: MigrationReport) -> Any:
 
 
 def _strip_extra_defaults(new_data: dict, report: MigrationReport) -> None:
-    """Remove unconditional chart defaults from extra* fields; flag conditional ones."""
+    """Comment out unconditional chart defaults in extra* fields; flag conditional ones."""
 
-    def _filter_list(
+    def _partition_list(
         key: str,
         items: list,
         name_field: str,
@@ -969,12 +970,7 @@ def _strip_extra_defaults(new_data: dict, report: MigrationReport) -> None:
             name = item.get(name_field, "")
             path = item.get(path_field, "") if path_field else ""
             if name in unconditional_names or path in unconditional_paths:
-                report.removed.append(
-                    {
-                        "old": f"{key} (name: '{name}')",
-                        "notes": "chart-managed default in 2.y",
-                    }
-                )
+                report.commented_defaults.setdefault(key, []).append(item)
             elif name in conditional_names or path in conditional_paths:
                 report.review.append(
                     {
@@ -991,78 +987,48 @@ def _strip_extra_defaults(new_data: dict, report: MigrationReport) -> None:
                 kept.append(item)
         return kept
 
-    # --- extraVolumes ---
-    extra_vols = new_data.get("extraVolumes", [])
-    if isinstance(extra_vols, list) and extra_vols:
-        filtered = _filter_list(
-            "extraVolumes",
-            extra_vols,
-            "name",
-            _UNCONDITIONAL_VOLUME_NAMES,
-            _CONDITIONAL_VOLUME_NAMES,
-            None,
-            set(),
-            set(),
+    def _process(
+        key: str,
+        name_field: str,
+        u_names: set[str],
+        c_names: set[str],
+        path_field: str | None = None,
+        u_paths: set[str] | None = None,
+        c_paths: set[str] | None = None,
+    ) -> None:
+        items = new_data.get(key, [])
+        if not isinstance(items, list) or not items:
+            return
+        kept = _partition_list(
+            key,
+            items,
+            name_field,
+            u_names,
+            c_names,
+            path_field,
+            u_paths or set(),
+            c_paths or set(),
         )
-        if filtered:
-            new_data["extraVolumes"] = filtered
+        if kept:
+            new_data[key] = kept
         else:
-            del new_data["extraVolumes"]
+            del new_data[key]
 
-    # --- extraVolumeMounts ---
-    extra_mounts = new_data.get("extraVolumeMounts", [])
-    if isinstance(extra_mounts, list) and extra_mounts:
-        filtered = _filter_list(
-            "extraVolumeMounts",
-            extra_mounts,
-            "name",
-            _UNCONDITIONAL_MOUNT_NAMES,
-            _CONDITIONAL_VOLUME_NAMES,
-            "mountPath",
-            _UNCONDITIONAL_MOUNT_PATHS,
-            _CONDITIONAL_MOUNT_PATHS,
-        )
-        if filtered:
-            new_data["extraVolumeMounts"] = filtered
-        else:
-            del new_data["extraVolumeMounts"]
-
-    # --- extraEnv ---
-    extra_env = new_data.get("extraEnv", [])
-    if isinstance(extra_env, list) and extra_env:
-        filtered = _filter_list(
-            "extraEnv",
-            extra_env,
-            "name",
-            _UNCONDITIONAL_ENV_NAMES,
-            _CONDITIONAL_ENV_NAMES,
-            None,
-            set(),
-            set(),
-        )
-        if filtered:
-            new_data["extraEnv"] = filtered
-        else:
-            del new_data["extraEnv"]
-
-    # --- extraInitContainers / preInitContainers ---
+    _process("extraVolumes", "name", _UNCONDITIONAL_VOLUME_NAMES, _CONDITIONAL_VOLUME_NAMES)
+    _process(
+        "extraVolumeMounts",
+        "name",
+        _UNCONDITIONAL_MOUNT_NAMES,
+        _CONDITIONAL_VOLUME_NAMES,
+        "mountPath",
+        _UNCONDITIONAL_MOUNT_PATHS,
+        _CONDITIONAL_MOUNT_PATHS,
+    )
+    _process("extraEnv", "name", _UNCONDITIONAL_ENV_NAMES, _CONDITIONAL_ENV_NAMES)
     for ic_key in ("extraInitContainers", "preInitContainers"):
-        extra_ic = new_data.get(ic_key, [])
-        if isinstance(extra_ic, list) and extra_ic:
-            filtered = _filter_list(
-                ic_key,
-                extra_ic,
-                "name",
-                _UNCONDITIONAL_INIT_CONTAINER_NAMES,
-                _CONDITIONAL_INIT_CONTAINER_NAMES,
-                None,
-                set(),
-                set(),
-            )
-            if filtered:
-                new_data[ic_key] = filtered
-            else:
-                del new_data[ic_key]
+        _process(
+            ic_key, "name", _UNCONDITIONAL_INIT_CONTAINER_NAMES, _CONDITIONAL_INIT_CONTAINER_NAMES
+        )
 
 
 def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
@@ -1360,6 +1326,9 @@ def add_review_comments(yaml_str: str, report: MigrationReport) -> str:
         header_comments.append(
             f"# {len(report.review)} area(s) flagged for review (search for MIGRATION-REVIEW)."
         )
+    if report.commented_defaults:
+        total_commented = sum(len(v) for v in report.commented_defaults.values())
+        header_comments.append(f"# {total_commented} chart-managed default(s) commented out.")
     if report.removed:
         header_comments.append(f"# {len(report.removed)} key(s) removed (no 2.y equivalent).")
     if report.unknown_upstream_keys:
@@ -1431,6 +1400,38 @@ def add_review_comments(yaml_str: str, report: MigrationReport) -> str:
                 if i > 0 and "MIGRATION-REVIEW [unknown]" not in lines[i - 1]:
                     lines.insert(i, comment)
                 break
+
+    # Insert commented-out chart defaults next to their parent key
+    for key, items in report.commented_defaults.items():
+        item_yaml = yaml.dump(
+            items,
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+            width=10000,
+        ).rstrip()
+        commented = "\n".join(f"# {ln}" if ln.strip() else "#" for ln in item_yaml.split("\n"))
+        # Find the key line in the output and insert after it
+        target = key + ":"
+        inserted = False
+        for i, line in enumerate(lines):
+            if line.lstrip().startswith(target):
+                indent = line[: len(line) - len(line.lstrip())]
+                header_line = (
+                    f"{indent}# Chart-managed defaults (uncomment only if you need to customize):"
+                )
+                lines.insert(i + 1, f"{indent}{commented}")
+                lines.insert(i + 1, header_line)
+                inserted = True
+                break
+        if not inserted:
+            # Key was removed entirely (all entries were defaults) — add as
+            # a top-level commented-out section
+            lines.append("")
+            lines.append(
+                f"# {key}: (chart-managed defaults — uncomment only if you need to customize)"
+            )
+            lines.append(commented)
 
     if report.removed:
         lines.append("")
