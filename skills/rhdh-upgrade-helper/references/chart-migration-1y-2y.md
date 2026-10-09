@@ -585,6 +585,51 @@ tag, either set `digest: ""` to clear the default, or set `digest` to the correc
 your tag. This applies to every `image.*` block (`image`, `catalogIndex.image`,
 `intelligentAssistant.core.image`, `postgresql.image`, etc.).
 
+### Go template `.Values.*` references
+String values in the 1.y file may contain Go template expressions referencing old paths
+(e.g., `{{ .Values.global.host }}`). The migration script automatically rewrites known
+`.Values.global.*`, `.Values.upstream.*`, and `.Values.route.*` references to their 2.y
+equivalents (e.g., `{{ .Values.host }}`). References to decomposed fields (like
+`global.lightspeed.sidecar.image`, now split into `intelligentAssistant.core.image.*`)
+are flagged for manual update since a single replacement is not possible. Any remaining
+old-style references not in the mapping tables are also flagged.
+
+### Chart-managed defaults in extra* fields
+The 2.y chart automatically manages certain volumes, mounts, env vars, and init containers
+that 1.y users commonly added manually via `extraVolumes`, `extraVolumeMounts`, `extraEnv`,
+and `initContainers`. The migration script **removes unconditional defaults deterministically**
+and **flags conditional defaults for review**.
+
+#### Unconditional (removed automatically)
+
+**Volumes**: `dynamic-plugins-root`, `dynamic-plugins`, `dynamic-plugins-npmrc`,
+`dynamic-plugins-registry-auth`, `npmcacache`, `extensions-catalog`, `temp`
+
+**Mount paths**: `/opt/app-root/src/dynamic-plugins-root`, `/dynamic-plugins-root`,
+`/opt/app-root/src/dynamic-plugins.yaml`, `/opt/app-root/src/.npmrc.dynamic-plugins`,
+`/opt/app-root/src/.npmrc.d`, `/opt/app-root/src/.config/containers`,
+`/opt/app-root/src/.npm/_cacache`, `/extensions`, `/tmp`
+
+**Env vars**: `APP_CONFIG_backend_listen_port`, `NPM_CONFIG_USERCONFIG`
+
+**Init containers**: `install-dynamic-plugins`
+
+#### Conditional (flagged for review)
+
+**Volumes**: `backstage-app-config` (when `appConfig` is set), `lightspeed-data`,
+`lightspeed-config-stack`, `lightspeed-config-profile` (when IA is enabled)
+
+**Mount paths**: `/opt/app-root/src/app-config-from-configmap.yaml`
+
+**Env vars**: `BACKEND_SECRET` (when `auth.backend.enabled`), `POSTGRES_HOST`,
+`POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` (when DB is configured),
+`APP_CONFIG_app_baseUrl`, `APP_CONFIG_backend_baseUrl`, `APP_CONFIG_backend_cors_origin`
+(redundant with chart's default `appConfig`)
+
+**Init containers**: `wait-for-db` (when DB is configured)
+
+The output header recommends including only customized values for easier maintenance.
+
 ### Air-gapped image resolution
 `global.imageRegistry` and `global.imagePullSecrets` apply to all chart-managed container
 images but do **not** affect dynamic plugin references (`oci://` or `ref://` in

@@ -311,6 +311,104 @@ AMBIGUOUS_DESCRIPTIONS: dict[str, str] = {
     ),
 }
 
+# ---------------------------------------------------------------------------
+# .Values.* template reference mapping and chart-default detection
+# ---------------------------------------------------------------------------
+
+# Build a lookup from old dotted paths to new paths for replacing Go template
+# references like {{ .Values.global.host }} → {{ .Values.host }}.
+_VALUES_REF_MAPPING: dict[str, str] = {}
+for _old, _new, _ in DETERMINISTIC_MAPPINGS:
+    if _new is not None:
+        _VALUES_REF_MAPPING[_old] = _new
+# Parent-path mappings for object-level references
+_VALUES_REF_MAPPING["global.catalogIndex"] = "catalogIndex"
+_VALUES_REF_MAPPING["global.auth"] = "auth"
+_VALUES_REF_MAPPING["global.auth.backend"] = "auth.backend"
+_VALUES_REF_MAPPING["global.dynamic"] = "dynamicPlugins"
+_VALUES_REF_MAPPING["route"] = "openshift.route"
+_VALUES_REF_MAPPING["route.tls"] = "openshift.route.tls"
+# Pre-sort longest-first so specific paths match before shorter prefixes
+_SORTED_VALUES_REFS: list[tuple[str, str]] = sorted(
+    _VALUES_REF_MAPPING.items(), key=lambda x: -len(x[0])
+)
+
+# Fields where a single old value is now decomposed into sub-fields.
+_DECOMPOSED_FIELDS: dict[str, str] = {
+    "global.lightspeed.sidecar.image": (
+        "now decomposed into intelligentAssistant.core.image.{registry,repository,tag}"
+    ),
+    "orchestrator.sonataflowPlatform.initContainerImage": (
+        "now decomposed into orchestrator.sonataflowPlatform.dbCreationJob.image.{registry,repository,tag}"
+    ),
+    "orchestrator.sonataflowPlatform.createDBJobImage": (
+        "now decomposed into orchestrator.sonataflowPlatform.dbCreationJob.image.{registry,repository,tag}"
+    ),
+    "orchestrator.sonataflowPlatform.dataIndexImage": (
+        "now decomposed into orchestrator.sonataflowPlatform.dataIndex.image.{registry,repository,tag}"
+    ),
+    "orchestrator.sonataflowPlatform.jobServiceImage": (
+        "now decomposed into orchestrator.sonataflowPlatform.jobService.image.{registry,repository,tag}"
+    ),
+}
+
+# Chart-managed defaults — volumes, mounts, env vars, and init containers that
+# the 2.y chart creates unconditionally. Entries in extra* that match these are
+# removed deterministically.  Source: templates/_backstage-pod-template.tpl.
+_UNCONDITIONAL_VOLUME_NAMES: set[str] = {
+    "dynamic-plugins-root",
+    "dynamic-plugins",
+    "dynamic-plugins-npmrc",
+    "dynamic-plugins-registry-auth",
+    "npmcacache",
+    "extensions-catalog",
+    "temp",
+}
+_UNCONDITIONAL_MOUNT_NAMES: set[str] = _UNCONDITIONAL_VOLUME_NAMES
+_UNCONDITIONAL_MOUNT_PATHS: set[str] = {
+    "/opt/app-root/src/dynamic-plugins-root",
+    "/dynamic-plugins-root",
+    "/opt/app-root/src/dynamic-plugins.yaml",
+    "/opt/app-root/src/.npmrc.dynamic-plugins",
+    "/opt/app-root/src/.npmrc.d",
+    "/opt/app-root/src/.config/containers",
+    "/opt/app-root/src/.npm/_cacache",
+    "/extensions",
+    "/tmp",
+}
+_UNCONDITIONAL_ENV_NAMES: set[str] = {
+    "APP_CONFIG_backend_listen_port",
+    "NPM_CONFIG_USERCONFIG",
+}
+_UNCONDITIONAL_INIT_CONTAINER_NAMES: set[str] = {
+    "install-dynamic-plugins",
+}
+
+# Conditional chart-managed defaults — created only when certain features are
+# enabled. These are flagged for review rather than removed automatically.
+_CONDITIONAL_VOLUME_NAMES: set[str] = {
+    "backstage-app-config",
+    "lightspeed-data",
+    "lightspeed-config-stack",
+    "lightspeed-config-profile",
+}
+_CONDITIONAL_MOUNT_PATHS: set[str] = {
+    "/opt/app-root/src/app-config-from-configmap.yaml",
+}
+_CONDITIONAL_ENV_NAMES: set[str] = {
+    "BACKEND_SECRET",
+    "POSTGRES_HOST",
+    "POSTGRES_PORT",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "APP_CONFIG_app_baseUrl",
+    "APP_CONFIG_backend_baseUrl",
+    "APP_CONFIG_backend_cors_origin",
+}
+_CONDITIONAL_INIT_CONTAINER_NAMES: set[str] = {
+    "wait-for-db",
+}
+
 
 # ---------------------------------------------------------------------------
 # YAML helpers
@@ -794,6 +892,179 @@ def _scan_janus_refs(
             )
 
 
+def _fix_values_refs(data: Any, path: str, report: MigrationReport) -> Any:
+    """Recursively replace .Values.global.*/upstream.*/route.* Go template refs."""
+    if isinstance(data, dict):
+        return {
+            k: _fix_values_refs(v, f"{path}.{k}" if path else k, report) for k, v in data.items()
+        }
+    if isinstance(data, list):
+        return [_fix_values_refs(item, f"{path}[{i}]", report) for i, item in enumerate(data)]
+    if not isinstance(data, str) or ".Values." not in data:
+        return data
+
+    modified = data
+    # Flag decomposed fields first (before replacements eat the match)
+    for old_ref, explanation in _DECOMPOSED_FIELDS.items():
+        pat = re.compile(r"\.Values\." + re.escape(old_ref) + r"(?![.\w])")
+        if pat.search(modified):
+            report.review.append(
+                {
+                    "area": "valuesRef",
+                    "description": (
+                        f"{path} references .Values.{old_ref} which is "
+                        f"{explanation}. Update the reference to the specific "
+                        f"sub-field you need."
+                    ),
+                    "mapped_to": path,
+                }
+            )
+
+    # Replace known mappings (longest paths first)
+    for old_path, new_path in _SORTED_VALUES_REFS:
+        old_pat = r"\.Values\." + re.escape(old_path) + r"(?![.\w])"
+        new_val = f".Values.{new_path}"
+        new_str, count = re.subn(old_pat, new_val, modified)
+        if count:
+            modified = new_str
+            report.warnings.append(
+                f"Updated template reference in {path}: .Values.{old_path} → .Values.{new_path}"
+            )
+
+    # Flag any remaining old-style references that weren't mapped
+    remaining = re.findall(r"\.Values\.(global\.\w[\w.]*|upstream\.\w[\w.]*)", modified)
+    for ref in sorted(set(remaining)):
+        report.review.append(
+            {
+                "area": "valuesRef",
+                "description": (
+                    f"{path} references .Values.{ref} which was not "
+                    f"automatically mapped. Update manually to the 2.y "
+                    f"equivalent."
+                ),
+                "mapped_to": path,
+            }
+        )
+    return modified
+
+
+def _strip_extra_defaults(new_data: dict, report: MigrationReport) -> None:
+    """Remove unconditional chart defaults from extra* fields; flag conditional ones."""
+
+    def _filter_list(
+        key: str,
+        items: list,
+        name_field: str,
+        unconditional_names: set[str],
+        conditional_names: set[str],
+        path_field: str | None,
+        unconditional_paths: set[str],
+        conditional_paths: set[str],
+    ) -> list:
+        kept: list = []
+        for item in items:
+            if not isinstance(item, dict):
+                kept.append(item)
+                continue
+            name = item.get(name_field, "")
+            path = item.get(path_field, "") if path_field else ""
+            if name in unconditional_names or path in unconditional_paths:
+                report.removed.append(
+                    {
+                        "old": f"{key} (name: '{name}')",
+                        "notes": "chart-managed default in 2.y",
+                    }
+                )
+            elif name in conditional_names or path in conditional_paths:
+                report.review.append(
+                    {
+                        "area": "extraDefaults",
+                        "description": (
+                            f"{key} entry '{name}' may duplicate a conditional "
+                            f"chart default. Verify it is still needed."
+                        ),
+                        "mapped_to": key,
+                    }
+                )
+                kept.append(item)
+            else:
+                kept.append(item)
+        return kept
+
+    # --- extraVolumes ---
+    extra_vols = new_data.get("extraVolumes", [])
+    if isinstance(extra_vols, list) and extra_vols:
+        filtered = _filter_list(
+            "extraVolumes",
+            extra_vols,
+            "name",
+            _UNCONDITIONAL_VOLUME_NAMES,
+            _CONDITIONAL_VOLUME_NAMES,
+            None,
+            set(),
+            set(),
+        )
+        if filtered:
+            new_data["extraVolumes"] = filtered
+        else:
+            del new_data["extraVolumes"]
+
+    # --- extraVolumeMounts ---
+    extra_mounts = new_data.get("extraVolumeMounts", [])
+    if isinstance(extra_mounts, list) and extra_mounts:
+        filtered = _filter_list(
+            "extraVolumeMounts",
+            extra_mounts,
+            "name",
+            _UNCONDITIONAL_MOUNT_NAMES,
+            _CONDITIONAL_VOLUME_NAMES,
+            "mountPath",
+            _UNCONDITIONAL_MOUNT_PATHS,
+            _CONDITIONAL_MOUNT_PATHS,
+        )
+        if filtered:
+            new_data["extraVolumeMounts"] = filtered
+        else:
+            del new_data["extraVolumeMounts"]
+
+    # --- extraEnv ---
+    extra_env = new_data.get("extraEnv", [])
+    if isinstance(extra_env, list) and extra_env:
+        filtered = _filter_list(
+            "extraEnv",
+            extra_env,
+            "name",
+            _UNCONDITIONAL_ENV_NAMES,
+            _CONDITIONAL_ENV_NAMES,
+            None,
+            set(),
+            set(),
+        )
+        if filtered:
+            new_data["extraEnv"] = filtered
+        else:
+            del new_data["extraEnv"]
+
+    # --- extraInitContainers / preInitContainers ---
+    for ic_key in ("extraInitContainers", "preInitContainers"):
+        extra_ic = new_data.get(ic_key, [])
+        if isinstance(extra_ic, list) and extra_ic:
+            filtered = _filter_list(
+                ic_key,
+                extra_ic,
+                "name",
+                _UNCONDITIONAL_INIT_CONTAINER_NAMES,
+                _CONDITIONAL_INIT_CONTAINER_NAMES,
+                None,
+                set(),
+                set(),
+            )
+            if filtered:
+                new_data[ic_key] = filtered
+            else:
+                del new_data[ic_key]
+
+
 def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
     """Apply all migrations to old_data and return (new_data, report)."""
     data = copy.deepcopy(old_data)
@@ -1010,6 +1281,12 @@ def migrate(old_data: dict) -> tuple[dict, MigrationReport]:
     _JANUS_IDP_RE = re.compile(r"janus-idp\.\w+")
     _scan_janus_refs(new_data, "", _JANUS_IDP_RE, report)
 
+    # 2c. Fix .Values.global.* / .Values.upstream.* Go template references
+    new_data = _fix_values_refs(new_data, "", report)
+
+    # 2d. Strip unconditional chart defaults from extra* fields
+    _strip_extra_defaults(new_data, report)
+
     # 3. Pass through remaining keys
     remaining_keys = flatten_keys(data)
     for key in remaining_keys:
@@ -1076,21 +1353,25 @@ def add_review_comments(yaml_str: str, report: MigrationReport) -> str:
     lines = yaml_str.split("\n")
     header_comments: list[str] = []
 
+    header_comments.append("# ================================================================")
+    header_comments.append("# MIGRATION-REVIEW: This file was auto-generated from 1.y values.")
+    header_comments.append(f"# {len(report.applied)} keys migrated deterministically.")
     if report.review:
-        header_comments.append("# ================================================================")
-        header_comments.append("# MIGRATION-REVIEW: This file was auto-generated from 1.y values.")
-        header_comments.append(f"# {len(report.applied)} keys migrated deterministically.")
         header_comments.append(
             f"# {len(report.review)} area(s) flagged for review (search for MIGRATION-REVIEW)."
         )
-        if report.removed:
-            header_comments.append(f"# {len(report.removed)} key(s) removed (no 2.y equivalent).")
-        if report.unknown_upstream_keys:
-            header_comments.append(
-                f"# {len(report.unknown_upstream_keys)} unknown upstream key(s) carried over with warnings."
-            )
-        header_comments.append("# ================================================================")
-        header_comments.append("")
+    if report.removed:
+        header_comments.append(f"# {len(report.removed)} key(s) removed (no 2.y equivalent).")
+    if report.unknown_upstream_keys:
+        header_comments.append(
+            f"# {len(report.unknown_upstream_keys)} unknown upstream key(s) carried over with warnings."
+        )
+    header_comments.append("#")
+    header_comments.append("# TIP: Only include values you have customized. Omitting chart")
+    header_comments.append("# defaults makes maintenance easier and reduces conflicts on")
+    header_comments.append("# future chart upgrades.")
+    header_comments.append("# ================================================================")
+    header_comments.append("")
 
     # Map areas to YAML search keys for inline placement.
     # Areas with a "mapped_to" field use that dotted path to find the line.
@@ -1103,6 +1384,7 @@ def add_review_comments(yaml_str: str, report: MigrationReport) -> str:
         "intelligentAssistant": "intelligentAssistant:",
         "authSecret": "auth:",
         "orchestrator": "orchestrator:",
+        "extraDefaults": ("extraVolumes:", "extraVolumeMounts:", "extraEnv:"),
     }
 
     for item in report.review:
@@ -1195,6 +1477,7 @@ def _migrate_one(
             default_flow_style=False,
             sort_keys=False,
             allow_unicode=True,
+            width=10000,
         )
         output_str = add_review_comments(yaml_str, report)
         if target_version:

@@ -120,6 +120,7 @@ Present a summary to the user:
 ## Chart values migration: RHDH {from} → {to}
 
 **Deterministic mappings applied:** {N} keys migrated automatically
+**Template references updated:** .Values.global.* / .Values.upstream.* refs rewritten to 2.y paths
 **Removed values:** {M} keys with no 2.y equivalent
 **Areas requiring review:** {R} (listed below)
 **Unknown upstream keys:** {U} carried over with warnings
@@ -180,6 +181,26 @@ or cross-namespace services? If so, you'll need to add NetworkPolicy rules after
 - Image strings split into components
 - Job config fields nested under `dbCreationJob.*`
 If `initContainerImage` and `createDBJobImage` differed, ask which to use.
+
+**valuesRef** — The script automatically replaces known `.Values.global.*` and
+`.Values.upstream.*` Go template references with their 2.y equivalents (e.g.,
+`.Values.global.host` → `.Values.host`). For flagged references:
+- If the reference was to a decomposed field (e.g., `global.lightspeed.sidecar.image`
+  which is now `intelligentAssistant.core.image.{registry,repository,tag}`), explain the
+  structural change and help the user update to the specific sub-field they need.
+- If the reference was not automatically mapped, look up the correct 2.y path from
+  `references/chart-migration-1y-2y.md` and apply it.
+
+**extraDefaults** — The script automatically removes unconditional chart-managed defaults
+(e.g., `dynamic-plugins-root` volume, `APP_CONFIG_backend_listen_port` env var) and flags
+conditional ones for review (e.g., `BACKEND_SECRET`, `backstage-app-config` volume). For
+each flagged entry:
+- Explain that the 2.y chart may manage this resource automatically depending on
+  configuration (e.g., `BACKEND_SECRET` is set when `auth.backend.enabled`).
+- Recommend removing it unless the user has a custom value that differs from the chart
+  default.
+- If the user confirms removal, delete the entry from the output file.
+- See `references/chart-migration-1y-2y.md` "Chart-managed defaults" for the full list.
 
 ### After all areas resolved
 
