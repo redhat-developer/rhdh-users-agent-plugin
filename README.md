@@ -12,7 +12,7 @@ Portable [Agent Plugin](https://agent-plugins.org/) with [Agent Skills](https://
 | Skill | Use when you want to |
 | ----- | -------------------- |
 | [rhdh-templates](./skills/rhdh-templates/SKILL.md) | Author and validate Software Templates with guided workflows |
-| [rhdh-upgrade-helper](./skills/rhdh-upgrade-helper/SKILL.md) | Prepare for an RHDH upgrade with OCI checks, Jira bug search, and a Readiness Score |
+| [rhdh-upgrade-helper](./skills/rhdh-upgrade-helper/SKILL.md) | Prepare for an RHDH upgrade (including 1.y→2.y chart values migration) with OCI checks, Jira bug search, and a Readiness Score |
 | [skill-maker](./skills/skill-maker/SKILL.md) | Create, audit, and consolidate Agent Skills |
 
 ## rhdh-upgrade-helper
@@ -20,6 +20,7 @@ Portable [Agent Plugin](https://agent-plugins.org/) with [Agent Skills](https://
 Analyzes your RHDH configuration against a target release and produces a personalized migration plan. The report shows what affects your setup and what does not. The skill works with Helm, Operator, and rhdh-local deployments.
 
 **What it does:**
+- Migrates Helm chart values from 1.y to 2.y structure (deterministic key mappings + AI-assisted resolution of ambiguous areas)
 - Resolves OCI references for every plugin via the shipped catalog-index image, with overlay repo metadata as a fallback
 - Validates existing OCI plugin tags against the target release
 - Searches RHDHBUGS Jira per-plugin for known bugs affecting your versions
@@ -27,25 +28,19 @@ Analyzes your RHDH configuration against a target release and produces a persona
 - Computes a 0-100 Readiness Score with transparent breakdown
 - Includes bundled release notes for RHDH 1.4–1.10
 
-See [rhdh-upgrade-helper](./skills/rhdh-upgrade-helper/SKILL.md) for the full skill definition. The skill:
-
-- resolves OCI references for every plugin via the shipped catalog-index image, with overlay repo metadata as a fallback.
-- validates existing OCI plugin tags against the target release.
-- searches the RHDHBUGS Jira project per plugin for known bugs affecting your versions.
-- filters breaking changes into "Affects You" and "Does NOT Affect You" based on your config.
-- computes a 0–100 Readiness Score with a transparent breakdown.
-
-Bundled release notes cover RHDH 1.4–1.10.
+See [rhdh-upgrade-helper](./skills/rhdh-upgrade-helper/SKILL.md) for the full skill definition.
 
 Workflows:
 
 - [full-report](./skills/rhdh-upgrade-helper/workflows/full-report.md): generate a complete upgrade report from config files or a `.rhdh-upgrade-helper.yaml`.
+- [chart-migration](./skills/rhdh-upgrade-helper/workflows/chart-migration.md): migrate Helm chart values from 1.y to 2.y structure with AI-assisted resolution.
 - [interactive](./skills/rhdh-upgrade-helper/workflows/interactive.md): guided assessment when no config files are available.
 - [help](./skills/rhdh-upgrade-helper/workflows/help.md): show usage, arguments, and examples.
 
 Example prompts:
 
 - "Analyze my values.yaml for upgrading from RHDH 1.8 to 1.10"
+- "Migrate my Helm values from RHDH 1.10 to 2.1"
 - "What breaks if I upgrade to RHDH 1.10?"
 - "Run an upgrade assessment on my rhdh-local project"
 
