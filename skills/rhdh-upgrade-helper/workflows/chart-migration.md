@@ -255,75 +255,18 @@ Regardless of whether ambiguous areas existed, warn about behavioral changes:
    helm template <release> redhat-developer-hub --repo <repo-url> --version <chart-version> -f base-2.1.yaml -f prod-2.1.yaml
    ```
 
-## Step 5: Produce combined report
+## Step 5: Full upgrade assessment
 
-If the user provided config files beyond just the Helm values (e.g., app-config.yaml,
-dynamic-plugins.yaml), run `workflows/full-report.md` with the **migrated** values file
-as input alongside the other config files. This produces the standard upgrade assessment
-(plugin analysis, release notes correlation, scoring) combined with the chart migration.
+After chart migration, always run `workflows/full-report.md` with the **migrated**
+values file(s) as input (alongside any other config files the user provided, such as
+app-config.yaml or dynamic-plugins.yaml). This produces the standard upgrade assessment
+(plugin analysis, release notes correlation, readiness scoring) combined with the chart
+migration results — so one invocation gives the user both the Helm migration actions and
+the full release guidance.
 
-If only the Helm values file was provided, produce a standalone chart migration report:
-
-```
-## Chart migration report: RHDH {from} → {to}
-### Generated: {date}
-
-> **Migration status:** {Complete | Complete with manual actions}
-> **Keys migrated:** {N} deterministic + {R} reviewed
-> **Removed:** {M} (no 2.y equivalent)
-> **Manual actions required:** {count}
-
----
-
-### Deterministic migrations applied
-
-{N} values keys automatically translated to the 2.y structure.
-No action needed for these.
-
-### Reviewed and confirmed
-
-{For each resolved ambiguous area, show what was decided}
-
-### Manual actions required
-
-{List any post-migration steps: create secrets, add NetworkPolicy rules, etc.}
-
-### Behavioral change warnings
-
-{PostgreSQL version, HPA defaults, env var renames, etc.}
-
-### Pre-upgrade validation
-
-Validate the migrated values before upgrading. If multiple values files were
-migrated, pass them in the same order as the original 1.y install.
-
-Use the chart version and repo URL from the **Chart version resolution** section:
-
-```bash
-helm template <release> redhat-developer-hub --repo <repo-url> --version {chart-version} -f {output-file(s)}
-```
-
-Then upgrade:
-
-```bash
-helm upgrade --install <release> redhat-developer-hub --repo <repo-url> --version {chart-version} -n <namespace> -f {output-file(s)}
-```
-
-### Migrated values file
-
-The migrated 2.y values file has been written to: `{output-path}`
-```
-
-### RHDH Local
-
-Do **not** recommend RHDH Local for validating Helm values files. RHDH Local uses
-`podman compose` with app-config files — it cannot process Helm values or resolve
-Go template expressions (e.g., `{{ include "rhdh.hostname" . }}`). The correct
-validation path for chart migrations is `helm template` (shown above).
-
-RHDH Local is still relevant when the customer also has app-config files to
-validate — in that case, defer to `workflows/full-report.md` which includes the
-RHDH Local recommendation for the app-config portion.
+The migrated values file contains plugin config, auth settings, and other fields the
+full-report workflow needs. MIGRATION-REVIEW comment markers are YAML comments and do
+not interfere with parsing.
 
 ## Report rules
 
