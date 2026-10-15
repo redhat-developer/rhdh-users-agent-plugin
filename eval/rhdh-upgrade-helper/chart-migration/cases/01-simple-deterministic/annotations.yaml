@@ -1,0 +1,23 @@
+category: deterministic
+rationale: Simple 1.y values with only deterministic mappings. All keys should migrate cleanly.
+expected_mappings:
+  image.registry: registry.redhat.io
+  image.repository: rhdh/rhdh-hub-rhel9
+  image.tag: "1.10"
+  replicaCount: 2
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+  resources.limits.memory: 4Gi
+  serviceAccount.create: true
+  serviceAccount.name: rhdh-sa
+  service.type: ClusterIP
+  service.port: 7007
+  postgresql.enabled: true
+  openshift.clusterRouterBase: apps.ocp.example.com
+  host: rhdh.apps.ocp.example.com
+  dynamicPlugins.includes: null
+  auth.backend.enabled: true
+  openshift.route.enabled: true
+  openshift.route.tls.termination: edge
+expected_ambiguous_areas: []
+expected_removed: []

@@ -1,0 +1,35 @@
+name: rhdh-upgrade-helper-chart-migration
+description: Verify the chart values migration script correctly transforms 1.y values to 2.y structure.
+
+execution:
+  mode: case
+  timeout: 120
+  parallelism: 2
+
+dataset:
+  path: cases
+  schema: |
+    Each case contains input.yaml with fixture_path and expected outcomes,
+    and annotations.yaml with the expected results.
+
+judges:
+  - name: deterministic_accuracy
+    description: All deterministic key mappings are applied correctly.
+    module: eval.rhdh-upgrade-helper.chart-migration.judges
+    function: check_deterministic_mappings
+  - name: ambiguous_detection
+    description: Ambiguous areas are flagged with MIGRATION-REVIEW markers, not silently transformed.
+    module: eval.rhdh-upgrade-helper.chart-migration.judges
+    function: check_ambiguous_detection
+  - name: removed_values
+    description: Removed values are excluded from output and reported.
+    module: eval.rhdh-upgrade-helper.chart-migration.judges
+    function: check_removed_values
+  - name: no_data_loss
+    description: No customer values are silently dropped during migration.
+    module: eval.rhdh-upgrade-helper.chart-migration.judges
+    function: check_no_data_loss
+  - name: valid_yaml
+    description: Output is valid YAML that can be parsed without errors.
+    module: eval.rhdh-upgrade-helper.chart-migration.judges
+    function: check_valid_yaml
