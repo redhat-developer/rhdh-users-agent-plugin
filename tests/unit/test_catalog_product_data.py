@@ -334,10 +334,10 @@ def test_defaults_reads_overlay_enabled_and_disabled_sections(tmp_path):
         "packages:\n"
         "  enabled:\n"
         "  - package: '@backstage/plugin-techdocs'\n"
-        "    support: \"generally-available\"\n"
+        '    support: "generally-available"\n'
         "  disabled:\n"
         "  - package: '@backstage/plugin-scorecard'\n"
-        "    support: \"tech-preview\"\n"
+        '    support: "tech-preview"\n'
     )
 
     defaults = run_parser(tmp_path, "defaults", release="2.1")
