@@ -33,7 +33,7 @@ This skill uses two data sources:
 
 2. **Product context** — release diffs, breaking changes, plugin version jumps, support level changes, bundle-to-OCI migrations. Gathered first from the shipped `plugin-catalog-index` image, which includes productized plugin metadata and documentation, with the public `rhdh-plugin-export-overlays` repo as a fallback, plus RHDH release notes. Determines what changed between your current and target releases.
 
-3. **Known bug data** — For each plugin in your config, the skill searches the RHDHBUGS Jira project for open bugs affecting that plugin in the target release. Also queries GitHub Issues on `redhat-developer/rhdh` for community-reported upgrade issues. If Jira is not accessible, falls back to GitHub Issues and release notes only.
+3. **Known bug data** — For every plugin in your effective plugin set — the ones you configured plus the ones the target release pre-installs and enables by default — the skill searches the RHDHBUGS Jira project for open bugs affecting that plugin in the target release. It also maps the release notes' "Known issues" section onto those plugins and queries GitHub Issues on `redhat-developer/rhdh` for community-reported upgrade issues. If Jira is not accessible, it falls back to GitHub Issues and release notes only.
 
 4. **Chart migration data** — For major version upgrades (1.y → 2.y), the chart values migration reference (`references/chart-migration-1y-2y.md`) provides deterministic key mappings and ambiguous area guidance. The migration script (`scripts/migrate-chart-values.py`) automates mechanical translations and flags areas needing AI-assisted resolution.
 

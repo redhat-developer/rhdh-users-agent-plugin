@@ -100,7 +100,41 @@ def test_parser_preserves_catalog_metadata_and_reports_authoritative_source(tmp_
     plugin_b = next(plugin for plugin in plugins if plugin["name"] == "plugin-b")
     assert plugin_b["defaultDisabled"] is False
     assert defaults["bundled_local"] == 2
+    assert defaults["plugins"] == [
+        {"package": "./dynamic-plugins/dist/plugin-a", "enabled": False},
+        {"package": "oci://quay.io/example/plugin-direct@sha256:ghi", "enabled": True},
+        {"package": "./dynamic-plugins/dist/plugin-b", "enabled": True},
+    ]
     assert versions == {"backstage": "1.49.4", "rhdh": "1.10.2"}
+
+
+def test_defaults_lists_preinstalled_plugins_with_resolved_enablement(tmp_path):
+    """Default-enabled plugins are enumerable so known issues can be matched to them."""
+    catalog = tmp_path / "rhdh-catalog-index-2.1"
+    catalog.mkdir()
+    (catalog / "index.json").write_text("{}")
+    (catalog / "dynamic-plugins.default.yaml").write_text(
+        "# - package: ./dynamic-plugins/dist/commented-out\n"
+        "- package: ref://catalog\n"
+        "  enabled: true\n"
+        "- package: ref://techdocs\n"
+        "  enabled: false\n"
+        "- package: ./dynamic-plugins/dist/plugin-b\n"
+        "  disabled: false\n"
+        "  pluginConfig:\n"
+        "    dynamicPlugins:\n"
+        "      frontend:\n"
+        "        example.plugin:\n"
+        "          disabled: false\n"
+    )
+
+    defaults = run_parser(tmp_path, "defaults", release="2.1")
+
+    assert defaults["plugins"] == [
+        {"package": "ref://catalog", "enabled": True},
+        {"package": "ref://techdocs", "enabled": False},
+        {"package": "./dynamic-plugins/dist/plugin-b", "enabled": True},
+    ]
 
 
 def test_parser_uses_overlay_csv_as_reduced_fidelity_fallback(tmp_path):
@@ -289,3 +323,26 @@ def test_extractor_rejects_path_like_release():
 
     assert result.returncode != 0
     assert "Invalid release" in result.stderr
+
+
+def test_defaults_reads_overlay_enabled_and_disabled_sections(tmp_path):
+    """Overlay-style defaults list plugins under enabled/disabled sections."""
+    overlay = tmp_path / "rhdh-overlays-2.1"
+    overlay.mkdir()
+    (overlay / "versions.json").write_text('{"backstage": "1.54.9"}')
+    (overlay / "default.packages.yaml").write_text(
+        "packages:\n"
+        "  enabled:\n"
+        "  - package: '@backstage/plugin-techdocs'\n"
+        "    support: \"generally-available\"\n"
+        "  disabled:\n"
+        "  - package: '@backstage/plugin-scorecard'\n"
+        "    support: \"tech-preview\"\n"
+    )
+
+    defaults = run_parser(tmp_path, "defaults", release="2.1")
+
+    assert defaults["plugins"] == [
+        {"package": "@backstage/plugin-techdocs", "enabled": True},
+        {"package": "@backstage/plugin-scorecard", "enabled": False},
+    ]

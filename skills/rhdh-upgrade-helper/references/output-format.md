@@ -61,17 +61,19 @@ These breaking changes exist in RHDH {target_version} but do NOT apply to your c
 
 ### Known Issues Affecting Your Plugins
 
-Known bugs that affect plugins in your configuration for the target release. Sourced from internal bug tracking and public GitHub Issues.
+Known bugs that affect plugins in your environment for the target release — both the plugins you configured and the plugins the target release pre-installs and enables by default. Sourced from internal bug tracking, public GitHub Issues, and the release notes.
 
-| Plugin | Issue | Status | Impact | Workaround |
-|--------|-------|--------|--------|------------|
-| {plugin_name} | {one-line summary} | {Open/Resolved} | {severity — Critical/Major/Minor} | {workaround or "None"} |
+| Plugin | Plugin source | Issue | Status | Impact | Workaround |
+|--------|---------------|-------|--------|--------|------------|
+| {plugin_name} | {Configured / Pre-installed} | {one-line summary} | {Open/Resolved} | {severity — Critical/Major/Minor} | {workaround or "None"} |
+
+Every pre-installed plugin that ships enabled is part of your runtime and can fail without appearing in your values file. If a known issue names one of them, it belongs in this table.
 
 When bugs are found from Jira (RHDHBUGS), describe the issue in customer-friendly language. Do NOT include internal Jira ticket URLs, ticket keys, or Slack thread links. Only include what the customer needs: what's broken, what's the impact, and how to work around it.
 
 When bugs are found from GitHub Issues, include the link: `[#{number}]({url})`.
 
-If no relevant issues were found, display: "No known bugs found for your plugin versions in this release."
+If no relevant issues were found, display: "No known bugs found for your plugin versions in this release." Only state this when every source was queried successfully; if a source was unavailable, say which one, so the customer does not read a partial search as a clean bill of health.
 
 ---
 
@@ -99,7 +101,7 @@ If no relevant issues were found, display: "No known bugs found for your plugin 
 | Deployment method | {Helm / Operator} | {config / answer} |
 | Auth providers | {list} | {config / answer} |
 | SCM integrations | {list} | {config / answer} |
-| Total plugins | {N} configured, {M} enabled | {config / answer} |
+| Total plugins | {N} configured ({M} enabled), {P} pre-installed by default | {config / answer} |
 | Custom plugins | {N} (not in default packages) | {config / answer} |
 | Features in use | {list} | {config / answer} |
 
@@ -148,6 +150,7 @@ Post-upgrade:
 - **Group by action urgency**, not by data source. The customer doesn't care whether a finding came from config analysis or release notes — they care whether it blocks their upgrade.
 - **Readiness score breakdown is mandatory.** Every deduction traces to a specific finding. No opaque scores.
 - **Config-sourced findings include file:line.** Intake-sourced findings say "Config area:" instead.
+- **Pre-installed plugins count as part of the environment.** Plugins the target release enables by default are reported in "Known Issues Affecting Your Plugins" and in the environment summary even when the customer never configured them; mark them `Pre-installed`.
 - **Severity markers:** Critical = must fix before upgrade (runtime failure). Important = fix soon after (degraded experience). Informational = awareness only.
 - **Effort labels:** Low (< 1 hour), Medium (1-4 hours), High (half day+), Extensive (multi-day).
 - **Never echo secrets.** Replace detected secret values with `[REDACTED]` in all output. See `references/secrets-detection.md`.

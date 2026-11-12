@@ -170,6 +170,16 @@ DEFAULT_PACKAGES=$(python3 "$SKILL_DIR/scripts/parse-catalog-index.py" \
 
 Use this to check which plugins in the customer's config exist in the target release and at what support level. If the source is the overlay fallback, label conclusions based on this data as fallback evidence.
 
+Also derive `$DEFAULT_ENABLED_PLUGINS` from `DEFAULT_PACKAGES.plugins`, keeping every entry whose `enabled` is `true`. These are the plugins the target image pre-installs and enables without the customer listing them in `values.yaml` or `dynamic-plugins.yaml`. They are part of the customer's runtime and must be evaluated for known issues alongside configured plugins.
+
+Then build the effective plugin set used by every later bug and compatibility check:
+
+```
+$EFFECTIVE_PLUGINS = configured plugins (local-path, OCI, NPM) ∪ $DEFAULT_ENABLED_PLUGINS
+```
+
+Label each entry with `source: configured` or `source: default-enabled`. A plugin can appear in both; keep one entry and set `source: configured`.
+
 ### 4b: Per-plugin metadata diff
 
 Build the plugin metadata input once through the parser:
@@ -257,11 +267,11 @@ Capture all gathered data as `$PRODUCT_CONTEXT`.
 
 ## Step 4.5: Query Known Bug Data
 
-Search two sources for known bugs that affect the customer's specific plugins and target version.
+Search three sources for known bugs that affect the customer's plugins and target version. Cover the whole effective plugin set from Step 4a, not just the plugins written in the customer's config files: a pre-installed plugin that ships enabled by default can break the upgrade just as easily as one the customer added.
 
 ### 4.5a: Per-plugin Jira search (RHDHBUGS)
 
-For each plugin in the customer's config (both local-path and OCI), search the RHDHBUGS Jira project for open bugs mentioning that plugin in the target release:
+For each plugin in `$EFFECTIVE_PLUGINS` (configured and default-enabled, both local-path and OCI), search the RHDHBUGS Jira project for open bugs mentioning that plugin in the target release:
 
 ```
 For each plugin image name (e.g., "immobiliarelabs-backstage-plugin-gitlab"):
@@ -280,7 +290,7 @@ For each result:
 - Present in the report as a known issue with customer-friendly language
 - **Do NOT expose the Jira ticket URL or internal references** — describe the issue in plain terms
 
-If the Jira MCP is not configured or the search fails, skip silently and rely on GitHub Issues + release notes.
+If the Jira MCP is not configured or the search fails, rely on GitHub Issues and the release notes, but record `jira_unavailable` in the `$KNOWN_BUGS` metadata and say so in one line under the known-issues table. A skipped search is not a clean result.
 
 ### 4.5b: GitHub Issues search (public)
 
@@ -299,11 +309,24 @@ gh search issues --repo redhat-developer/rhdh "{rhdh_from_release} upgrade migra
 
 Filter results to issues relevant to the customer's plugins and upgrade scenario.
 
-### 4.5c: Combine and deduplicate
+### 4.5c: Release-notes known issues
 
-Merge results from Jira and GitHub. Deduplicate by issue title/description similarity. Capture as `$KNOWN_BUGS` — array of `{source, key, summary, status, priority, workaround, affects_plugin}`.
+Read the "Known issues" section of every release notes file loaded in Step 4c. Each entry there is a shipped defect for the target release and applies to this upgrade even when no Jira or GitHub search returns it.
 
-Bug data is supplementary — if both searches return nothing, proceed without it.
+For each known-issue entry:
+
+1. Identify the plugin or feature it names — product name in prose (Bulk Import, Tekton, Scorecard, TechDocs) or package/image name.
+2. Match it against `$EFFECTIVE_PLUGINS` and the customer's enabled features. Match on the plugin, not on whether the customer configured it.
+3. If it matches, add it to `$KNOWN_BUGS` with `source: release-notes`, the affected plugin, the workaround text from the entry, and `status: open`.
+4. If the entry names no plugin and no feature the customer uses, leave it out.
+
+Do not drop an entry because the affected plugin is pre-installed and absent from the customer's config files — that is exactly the case this step exists to catch.
+
+### 4.5d: Combine and deduplicate
+
+Merge results from Jira, GitHub, and the release notes. Deduplicate by issue title/description similarity. Capture as `$KNOWN_BUGS` — array of `{source, key, summary, status, priority, workaround, affects_plugin, plugin_source}` where `plugin_source` is `configured` or `default-enabled`.
+
+Bug data is supplementary — if all three sources return nothing, proceed without it.
 
 ## Step 5: Config-Impact Correlation
 
@@ -313,7 +336,7 @@ For each breaking change and deprecation from `$PRODUCT_CONTEXT`:
 
 Cross-reference with the customer's environment:
 
-1. **Plugin-level check:** Does the breaking change mention a `@backstage/*` or `@red-hat-developer-hub/*` package? Is that package in the customer's configured plugins?
+1. **Plugin-level check:** Does the breaking change mention a `@backstage/*` or `@red-hat-developer-hub/*` package? Is that package in `$EFFECTIVE_PLUGINS` — configured, or enabled by default in the target image?
 2. **Feature-level check:** Does the change affect a feature area (auth, catalog, scaffolder, etc.) that the customer uses?
 3. **Config-level check:** Does the change involve a config key that exists in the customer's `app-config.yaml`?
 
@@ -353,7 +376,7 @@ Follow `references/output-format.md` to produce the customer-facing report:
 3. **Important section:** Items to address after upgrading
 4. **Informational section:** Nice-to-know items
 5. **Does NOT Affect You:** Breaking changes with no environment overlap
-6. **Known Community-Reported Issues:** Relevant bugs from `$PUBLIC_BUGS` (GitHub Issues)
+6. **Known Issues Affecting Your Plugins:** `$KNOWN_BUGS` from Jira, GitHub Issues, and the release notes, covering configured **and** default-enabled plugins, with a column showing which
 7. **What Changed:** Release summary (new features, plugin version table)
 8. **Environment Summary:** Table of detected/reported environment facts
 9. **Readiness Score Breakdown:** Full transparent scoring

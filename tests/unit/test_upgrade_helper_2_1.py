@@ -33,3 +33,12 @@ def test_chart_migration_versions_have_complete_release_notes():
 def test_rhdh_2_1_migration_reference_exists():
     """RHDH 2.1 product migration guidance is bundled for all deployment methods."""
     assert (UPGRADE_HELPER / "references" / "migration-2.1.md").is_file()
+
+
+def test_known_issue_step_covers_preinstalled_plugins():
+    """Bug checks must include plugins the target release enables by default."""
+    workflow = (UPGRADE_HELPER / "workflows" / "full-report.md").read_text(encoding="utf-8")
+
+    assert "$DEFAULT_ENABLED_PLUGINS" in workflow
+    assert "$EFFECTIVE_PLUGINS" in workflow
+    assert "release-notes known issues" in workflow.lower()

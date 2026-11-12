@@ -483,6 +483,53 @@ def cmd_workspaces(args: argparse.Namespace) -> None:
     print(json.dumps(result, indent=2) if args.json else "\n".join(result))
 
 
+def active_default_plugins(content: str) -> list[dict]:
+    """Return each shipped default package entry with its resolved enablement.
+
+    Handles both shipped formats: a flat `dynamic-plugins.default.yaml` list with
+    per-entry `enabled`/`disabled` fields, and the overlay `default.packages.yaml`
+    with `packages.enabled` and `packages.disabled` sections.
+    """
+    plugins = []
+    current = None
+    section_enabled = True
+
+    for line in content.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+
+        section_match = re.match(r"^\s*(enabled|disabled):\s*$", line)
+        if section_match:
+            section_enabled = section_match.group(1) == "enabled"
+            continue
+
+        package_match = re.match(r"^(\s*)-\s+package:\s*(\S+)", line)
+        if package_match:
+            current = {
+                "package": package_match.group(2).strip("\"'"),
+                "indent": len(package_match.group(1)),
+                "disabled": None,
+                "enabled": section_enabled,
+            }
+            plugins.append(current)
+            continue
+
+        if current is None:
+            continue
+
+        field_match = re.match(r"^(\s*)(disabled|enabled):\s*(true|false)", line)
+        if field_match and len(field_match.group(1)) == current["indent"] + 2:
+            current[field_match.group(2)] = field_match.group(3) == "true"
+
+    return [
+        {
+            "package": plugin["package"],
+            "enabled": plugin["disabled"] is not True and plugin["enabled"] is not False,
+        }
+        for plugin in plugins
+    ]
+
+
 def cmd_defaults(args: argparse.Namespace) -> None:
     data_dir, _ = find_data_dir(args.release, args.data_root)
     content = load_defaults(data_dir)
@@ -499,6 +546,7 @@ def cmd_defaults(args: argparse.Namespace) -> None:
         "oci_commented": sum(
             line.strip().startswith("# - package: oci://") for line in content.splitlines()
         ),
+        "plugins": active_default_plugins(content),
     }
     print(json.dumps(result, indent=2) if args.json else result)
 
