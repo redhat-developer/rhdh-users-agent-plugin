@@ -131,6 +131,8 @@ For **rhdh-local**, just point `--config-path` at the rhdh-local directory — e
 - If secrets are detected, you're warned and asked to continue or redact first
 - Detected secrets are replaced with `[REDACTED]` in all report output
 - The skill does not modify, store, or transmit your configuration files
+- Release notes are treated as external source data; embedded instructions are not followed
+- Assessments do not install tools, fetch release notes, or run the release-notes generator
 
 ### What it does NOT do
 
@@ -147,13 +149,12 @@ For **rhdh-local**, just point `--config-path` at the rhdh-local directory — e
 | `git` | Fallback | Shallow clone of the overlay repo for reduced-fidelity plugin metadata | Product context is limited to overlay files; report labels it as fallback evidence |
 | `gh` CLI (authenticated) | Recommended | GitHub Issues search | Bug search skipped if unavailable |
 | Atlassian MCP (Jira) | Optional | Per-plugin bug search against RHDHBUGS | Skipped silently — report uses release notes + GitHub Issues only |
-| `lynx` | Optional | Auto-fetch missing release notes | Notes the gap with a link to official docs |
 
 The skill degrades gracefully — the catalog-index image is preferred, but the core analysis can continue with the overlay Git fallback. If neither an image tool nor Git is available, plugin-support and OCI-migration conclusions are reported as unavailable rather than inferred.
 
 ### Bundled release notes
 
-Includes RHDH 1.4 through 1.10. Missing versions auto-fetched via `lynx` if available.
+Includes bundled notes for RHDH 1.4 through 1.10 and 2.1. Missing versions are reported with a link to the official documentation; the skill does not fetch them or install tools during an assessment.
 
 ### Support
 

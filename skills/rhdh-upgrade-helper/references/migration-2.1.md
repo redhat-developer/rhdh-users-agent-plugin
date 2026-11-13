@@ -22,6 +22,7 @@ The RHDH 2.1 upgrade guidance says direct upgrades from any earlier version to t
 
 - Confirm Kubernetes 1.32+ or OpenShift 4.19+.
 - For Operator deployments moving from 1.10 to 2.1, switch to the `fast-2.1` channel as directed by the upgrade guidance. Do not describe the generic `fast` channel as deprecated; it includes updates across versions.
+- Operator upgrades no longer skip minor versions: the 2.1 `skipRange` requires the previous minor, so the supported paths are 1.10.z → 2.1 and 2.1.z → 2.2.
 - For Helm deployments, migrate the 1.y values structure and validate it with `helm template`. In-place `helm upgrade` is supported; do not uninstall solely because of the major-version change.
 - Review the complete release-note range and the current pre-upgrade checklist. Back up configuration, database data, and custom plugin artifacts before applying changes.
 - Re-run the assessment against the resulting configuration before proceeding to production, especially if upgrading through an intermediate version.
