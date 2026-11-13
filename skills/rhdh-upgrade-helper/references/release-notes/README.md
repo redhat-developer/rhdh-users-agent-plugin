@@ -19,7 +19,7 @@ uv run python skills/rhdh-upgrade-helper/scripts/generate-release-notes.py --all
 uv run python skills/rhdh-upgrade-helper/scripts/generate-release-notes.py --all --check
 ```
 
-`.github/workflows/release-notes.yml` runs `--all` every Monday and opens a PR when the official notes change. Review the diff and merge; do not edit generated files by hand.
+`.github/workflows/release-notes.yml` runs `--all` every Monday and opens a PR when the official notes change. It keeps a single `bot/release-notes` branch: a later run updates that branch and the open PR instead of adding another, and a run that finds nothing new stops before pushing. Review the diff and merge; do not edit generated files by hand.
 
 ### Repository settings for the scheduled workflow
 
