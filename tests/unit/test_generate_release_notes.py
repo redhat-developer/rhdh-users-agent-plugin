@@ -1,6 +1,8 @@
 """Offline tests for the release-notes generator."""
 
 import runpy
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -88,6 +90,37 @@ def test_discover_sections_maps_known_slugs_only(generator):
 
 def test_discover_versions_filters_and_sorts_numerically(generator):
     assert generator["discover_versions"](read("product-page.html")) == ["2.1", "2.2", "2.10"]
+
+
+def stub_curl_cffi(monkeypatch, *, status: int = 200, html: str = "") -> None:
+    """Replace curl_cffi so fetch() can be tested without network access."""
+
+    class Response:
+        status_code = status
+        text = html
+
+    class Requests:
+        @staticmethod
+        def get(url, **kwargs):
+            return Response()
+
+    module = types.ModuleType("curl_cffi")
+    module.requests = Requests
+    monkeypatch.setitem(sys.modules, "curl_cffi", module)
+
+
+def test_fetch_accepts_product_page_without_article(generator, monkeypatch):
+    html = read("product-page.html")
+    stub_curl_cffi(monkeypatch, html=html)
+
+    assert generator["fetch"]("https://example.invalid/product") == html
+
+
+def test_fetch_rejects_page_without_documentation_markup(generator, monkeypatch):
+    stub_curl_cffi(monkeypatch, html="<html><body>Access Denied</body></html>")
+
+    with pytest.raises(generator["FetchError"]):
+        generator["fetch"]("https://example.invalid/product")
 
 
 def test_generated_output_satisfies_release_note_section_contract(generator):

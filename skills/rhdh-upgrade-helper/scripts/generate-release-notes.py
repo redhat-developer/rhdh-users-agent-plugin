@@ -240,8 +240,8 @@ def fetch(url: str) -> str:
     response = requests.get(url, impersonate="chrome", timeout=60)
     if response.status_code != 200:
         raise FetchError(f"{url} returned HTTP {response.status_code}")
-    if "<article" not in response.text:
-        raise FetchError(f"{url} did not return a documentation article")
+    if "<main" not in response.text:
+        raise FetchError(f"{url} did not return a documentation page")
     return response.text
 
 
