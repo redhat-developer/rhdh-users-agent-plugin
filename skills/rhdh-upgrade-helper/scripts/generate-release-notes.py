@@ -5,7 +5,9 @@ docs.redhat.com rejects lynx, curl, and headless browsers with HTTP 403, so the
 fetch uses curl_cffi's Chrome TLS impersonation (install with
 `uv sync --extra release-notes`). Parsing uses only the standard library.
 
-Only 2.x and later are generated; 1.x pages use a different layout and are curated by hand.
+2.x pages are one landing page per release with a whats_new-* page per section. 1.x pages
+are a single book whose chapters use hyphenated paths and asciidoc variablelists. Both
+layouts are supported; --all only walks 2.x unless --min-major is lowered.
 
 Usage:
     generate-release-notes.py --release 2.1
@@ -24,6 +26,7 @@ from pathlib import Path
 DOCS_URL = "https://docs.redhat.com/en/documentation/red_hat_developer_hub"
 SUPPORTED_MIN_MAJOR = 2
 LANDING_SLUG = "red_hat_developer_hub_release_notes"
+LEGACY_ALIASES = {"developer_preview_features": "developer_preview"}
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "references" / "release-notes"
 
 SECTIONS = (
@@ -92,6 +95,50 @@ class _ArticleParser(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         if self._in_article and self._capture is not None:
+            self._buffer.append(data)
+
+
+class _VariableListParser(HTMLParser):
+    """Collect <div class="variablelist"> items, the asciidoc shape used by 1.x pages."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.items: list[dict] = []
+        self._in_term = 0
+        self._in_body = 0
+        self._buffer: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if (
+            tag == "div"
+            and "variablelist" in (attributes.get("class") or "")
+            and attributes.get("id")
+            and not self._in_body
+        ):
+            self.items.append({"id": attributes["id"], "title": "", "body": []})
+            self._buffer = []
+        elif tag == "span" and "term" in (attributes.get("class") or "") and not self._in_body:
+            self._in_term += 1
+        elif tag == "dd":
+            self._in_body += 1
+            self._buffer = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "span" and self._in_term:
+            self._in_term -= 1
+        elif tag in {"p", "dd"} and self._in_body:
+            text = clean_text("".join(self._buffer))
+            if text:
+                self.items[-1]["body"].append(text)
+            self._buffer = []
+            if tag == "dd":
+                self._in_body -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._in_term and self.items:
+            self.items[-1]["title"] += data
+        elif self._in_body:
             self._buffer.append(data)
 
 
@@ -188,6 +235,51 @@ def render_section(html: str, slug: str) -> str:
     return limit_body(text, BODY_LIMIT.get(slug, DEFAULT_BODY_LIMIT))
 
 
+def discover_legacy_sections(landing_html: str, version: str, docs_url: str) -> dict[str, str]:
+    """Map 1.x hyphenated chapter links to section slugs."""
+    found = {}
+    pattern = r"/html/" + re.escape(LANDING_SLUG) + r"/([a-z0-9-]+)"
+    for slug_path in re.findall(pattern, landing_html):
+        slug = slug_path.replace("-", "_")
+        slug = LEGACY_ALIASES.get(slug, slug)
+        if slug in SECTION_SLUGS:
+            found[slug] = f"{docs_url}/{version}/html/{LANDING_SLUG}/{slug_path}"
+    return found
+
+
+def render_legacy_section(html: str, slug: str) -> str:
+    """Render a 1.x chapter, where each item is a variablelist entry."""
+    parser = _VariableListParser()
+    parser.feed(html)
+    parser.close()
+
+    bullets = []
+    for entry in parser.items:
+        item = {
+            "title": clean_text(entry["title"]),
+            "paragraphs": entry["body"],
+            "bullets": [],
+            "tickets": [
+                f"RHDHBUGS-{number}" for number in re.findall(r"rhdhbugs-(\d+)", entry["id"])
+            ],
+        }
+        rendered = render_item(item, slug)
+        if rendered:
+            bullets.append(rendered)
+    if bullets:
+        return "\n".join(bullets)
+
+    article = re.search(r"<article[^>]*>(.*?)</article>", html, re.S)
+    links = [
+        clean_text(re.sub(r"<[^>]+>", " ", entry))
+        for entry in re.findall(r"<li[^>]*>(.*?)</li>", article.group(1) if article else "", re.S)
+    ]
+    links = [link for link in links if link]
+    if links:
+        return "\n".join(f"- {limit_body(link, DEFAULT_BODY_LIMIT)}" for link in links)
+    return "Not published for this release."
+
+
 def build_release(
     version: str, landing_url: str, landing_html: str, sections: dict[str, str]
 ) -> str:
@@ -253,18 +345,28 @@ def fetch(url: str) -> str:
 
 def generate(version: str, docs_url: str, output_dir: Path, check: bool) -> bool:
     """Generate one release file. Return True when the file changed."""
-    landing_url = f"{docs_url}/{version}/whats_new-{LANDING_SLUG}"
+    legacy = int(version.split(".")[0]) < SUPPORTED_MIN_MAJOR
+    if legacy:
+        landing_url = f"{docs_url}/{version}/html/{LANDING_SLUG}/index"
+    else:
+        landing_url = f"{docs_url}/{version}/whats_new-{LANDING_SLUG}"
     landing_html = fetch(landing_url)
-    section_urls = discover_sections(landing_html, version)
-    unknown = sorted(
-        set(re.findall(r"whats_new-([a-z_]+)", landing_html)) - SECTION_SLUGS - {LANDING_SLUG}
-    )
-    if unknown:
-        print(
-            f"warning: {version} publishes sections this generator ignores: "
-            f"{', '.join(unknown)}. Add them to SECTIONS if they should be kept.",
-            file=sys.stderr,
+
+    if legacy:
+        section_urls = discover_legacy_sections(landing_html, version, docs_url)
+        render = render_legacy_section
+    else:
+        section_urls = discover_sections(landing_html, version)
+        render = render_section
+        unknown = sorted(
+            set(re.findall(r"whats_new-([a-z_]+)", landing_html)) - SECTION_SLUGS - {LANDING_SLUG}
         )
+        if unknown:
+            print(
+                f"warning: {version} publishes sections this generator ignores: "
+                f"{', '.join(unknown)}. Add them to SECTIONS if they should be kept.",
+                file=sys.stderr,
+            )
     if not section_urls:
         raise FetchError(
             f"{landing_url} lists none of the known release-notes sections; the page layout "
@@ -277,7 +379,7 @@ def generate(version: str, docs_url: str, output_dir: Path, check: bool) -> bool
     sections = {}
     for slug, _ in SECTIONS:
         url = section_urls.get(slug)
-        sections[slug] = render_section(fetch(url), slug) if url else ""
+        sections[slug] = render(fetch(url), slug) if url else ""
 
     content = build_release(version, landing_url, landing_html, sections)
     target = output_dir / f"{version}.md"
@@ -297,18 +399,6 @@ def generate(version: str, docs_url: str, output_dir: Path, check: bool) -> bool
     return True
 
 
-def ensure_supported(version: str) -> None:
-    """Reject 1.x: those pages carry the chapters outside <article>, so nothing would parse."""
-    if int(version.split(".")[0]) < SUPPORTED_MIN_MAJOR:
-        print(
-            f"error: {version}: 1.x release notes come from the older single-page layout and "
-            "are curated by hand. This generator covers 2.x and later; see "
-            "references/release-notes/README.md.",
-            file=sys.stderr,
-        )
-        raise SystemExit(2)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -326,8 +416,6 @@ def main(argv: list[str] | None = None) -> int:
         versions += discover_versions(fetch(args.docs_url), args.min_major)
     if not versions:
         parser.error("pass --release X.Y or --all")
-    for version in versions:
-        ensure_supported(version)
 
     changed = False
     for version in dict.fromkeys(versions):

@@ -38,9 +38,7 @@ None of this applies to forks. GitHub disables scheduled workflows in forks by d
 
 ## Legacy releases
 
-`1.4`–`1.10` were hand-curated from the single-page documentation and are intentionally frozen; that layout parses differently. Keep them as-is unless a correctness fix is needed.
-
-The generator refuses 1.x versions with an error instead of writing an empty file, because those pages keep the chapters outside the `<article>` element.
+`1.4`–`1.10` come from the older book layout: the landing page is `/html/red_hat_developer_hub_release_notes/index`, each chapter has a hyphenated path such as `known-issues`, and each item is an asciidoc `variablelist`. The generator handles both layouts, but these files are intentionally frozen, so `--all` only walks 2.x. Regenerate one with `--release 1.10` only when it needs a correctness fix.
 
 ## Manual fallback
 

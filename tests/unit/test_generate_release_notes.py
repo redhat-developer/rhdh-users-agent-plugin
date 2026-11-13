@@ -125,19 +125,54 @@ def test_generate_fails_when_no_known_section_is_published(
     assert not (tmp_path / "2.2.md").exists()
 
 
-def test_rejects_1x_without_fetching(generator, monkeypatch, capsys):
-    def explode(*args, **kwargs):
-        raise AssertionError("must not fetch 1.x pages")
+def test_discover_legacy_sections_maps_hyphenated_chapters(generator):
+    html = (
+        '<a href="/en/documentation/red_hat_developer_hub/1.10/html/'
+        'red_hat_developer_hub_release_notes/known-issues">Known issues</a>'
+        '<a href="/en/documentation/red_hat_developer_hub/1.10/html/'
+        'red_hat_developer_hub_release_notes/legal-notice">Legal</a>'
+        '<a href="/en/documentation/red_hat_developer_hub/1.10/html/'
+        'red_hat_developer_hub_release_notes/fixed-security-issues#x">Security</a>'
+        '<a href="/en/documentation/red_hat_developer_hub/1.10/html/'
+        'red_hat_developer_hub_release_notes/developer-preview-features">Preview</a>'
+    )
 
-    module = types.ModuleType("curl_cffi")
-    module.requests = types.SimpleNamespace(get=explode)
-    monkeypatch.setitem(sys.modules, "curl_cffi", module)
+    found = generator["discover_legacy_sections"](html, "1.10", "https://example.invalid")
 
-    with pytest.raises(SystemExit) as exc:
-        generator["main"](["--release", "1.10"])
+    assert sorted(found) == ["developer_preview", "fixed_security_issues", "known_issues"]
+    assert found["known_issues"].endswith(
+        "/1.10/html/red_hat_developer_hub_release_notes/known-issues"
+    )
 
-    assert exc.value.code == 2
-    assert "1.x" in capsys.readouterr().err
+
+def test_render_legacy_section_falls_back_to_link_lists(generator):
+    html = (
+        "<html><body><article><section>"
+        "<p>See the advisories:</p><ul>"
+        "<li>For 1.10.0, see RHSA-2026:24841.</li>"
+        "<li>For 1.10.2, see RHSA-2026:36754.</li>"
+        "</ul></section></article><nav><ul><li>Navigation noise</li></ul></nav></body></html>"
+    )
+
+    rendered = generator["render_legacy_section"](html, "fixed_security_issues")
+
+    assert rendered.splitlines() == [
+        "- For 1.10.0, see RHSA-2026:24841.",
+        "- For 1.10.2, see RHSA-2026:36754.",
+    ]
+
+
+def test_render_legacy_section_reads_variablelists(generator):
+    rendered = generator["render_legacy_section"](
+        read("section-known-issues-1x.html"), "known_issues"
+    )
+    bullets = rendered.splitlines()
+
+    assert len(bullets) == 2
+    assert bullets[0].startswith("- **OCI images fail to auto-detect plugin paths**")
+    assert "RHDHBUGS-3307" in bullets[0]
+    assert bullets[1].startswith("- **Bulk Import marks repositories as already imported**")
+    assert "Close the pull request first." in bullets[1]
 
 
 def test_fetch_accepts_product_page_without_article(generator, monkeypatch):
