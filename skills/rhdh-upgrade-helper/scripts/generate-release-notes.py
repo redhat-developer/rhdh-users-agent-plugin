@@ -23,6 +23,7 @@ from pathlib import Path
 
 DOCS_URL = "https://docs.redhat.com/en/documentation/red_hat_developer_hub"
 SUPPORTED_MIN_MAJOR = 2
+LANDING_SLUG = "red_hat_developer_hub_release_notes"
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "references" / "release-notes"
 
 SECTIONS = (
@@ -252,9 +253,23 @@ def fetch(url: str) -> str:
 
 def generate(version: str, docs_url: str, output_dir: Path, check: bool) -> bool:
     """Generate one release file. Return True when the file changed."""
-    landing_url = f"{docs_url}/{version}/whats_new-red_hat_developer_hub_release_notes"
+    landing_url = f"{docs_url}/{version}/whats_new-{LANDING_SLUG}"
     landing_html = fetch(landing_url)
     section_urls = discover_sections(landing_html, version)
+    unknown = sorted(
+        set(re.findall(r"whats_new-([a-z_]+)", landing_html)) - SECTION_SLUGS - {LANDING_SLUG}
+    )
+    if unknown:
+        print(
+            f"warning: {version} publishes sections this generator ignores: "
+            f"{', '.join(unknown)}. Add them to SECTIONS if they should be kept.",
+            file=sys.stderr,
+        )
+    if not section_urls:
+        raise FetchError(
+            f"{landing_url} lists none of the known release-notes sections; the page layout "
+            "or the section names changed. Update SECTIONS in scripts/generate-release-notes.py."
+        )
     missing = [slug for slug, _ in SECTIONS if slug not in section_urls]
     for slug in missing:
         print(f"warning: {version} has no {slug} page", file=sys.stderr)

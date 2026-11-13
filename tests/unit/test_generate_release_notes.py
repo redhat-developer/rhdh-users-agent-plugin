@@ -109,6 +109,22 @@ def stub_curl_cffi(monkeypatch, *, status: int = 200, html: str = "") -> None:
     monkeypatch.setitem(sys.modules, "curl_cffi", module)
 
 
+def test_generate_fails_when_no_known_section_is_published(
+    generator, monkeypatch, tmp_path, capsys
+):
+    stub_curl_cffi(
+        monkeypatch,
+        html="<html><main><a href='/x/whats_new-brand_new_section'>new</a></main></html>",
+    )
+
+    with pytest.raises(generator["FetchError"]) as exc:
+        generator["generate"]("2.2", "https://example.invalid", tmp_path, False)
+
+    assert "none of the known" in str(exc.value)
+    assert "brand_new_section" in capsys.readouterr().err
+    assert not (tmp_path / "2.2.md").exists()
+
+
 def test_rejects_1x_without_fetching(generator, monkeypatch, capsys):
     def explode(*args, **kwargs):
         raise AssertionError("must not fetch 1.x pages")
