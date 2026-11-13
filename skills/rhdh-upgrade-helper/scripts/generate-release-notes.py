@@ -190,16 +190,18 @@ def build_release(
     """Assemble the release-notes markdown for one version."""
     _, intro, _, _ = parse_article(landing_html)
     summary = next((line for line in intro if len(line) > 40), "")
-    header = [f"# RHDH {version} Release Notes", ""]
-    if summary:
-        header += [limit_body(summary, 320), ""]
-    header += [
-        f"Generated from the official Red Hat documentation: <{landing_url}>",
+    header = [
+        f"# RHDH {version} Release Notes",
         "",
-        "Regenerate with `scripts/generate-release-notes.py --release "
-        f"{version}`. Do not edit by hand.",
+        "> **Do not edit by hand.** This file is generated from the official Red Hat "
+        "documentation and refreshed by the release-notes workflow. Regenerate with "
+        f"`scripts/generate-release-notes.py --release {version}`.",
+        "",
+        f"Source: <{landing_url}>",
         "",
     ]
+    if summary:
+        header += [limit_body(summary, 320), ""]
 
     body: list[str] = []
     for slug, heading in SECTIONS:

@@ -141,7 +141,8 @@ def test_generated_output_satisfies_release_note_section_contract(generator):
         assert section in content
 
 
-def test_bundled_notes_are_generator_shaped():
-    notes = (SKILL / "references/release-notes/2.1.md").read_text(encoding="utf-8")
+def test_bundled_notes_put_the_do_not_edit_notice_first():
+    lines = (SKILL / "references/release-notes/2.1.md").read_text(encoding="utf-8").splitlines()
 
-    assert "Do not edit by hand." in notes
+    assert lines[0] == "# RHDH 2.1 Release Notes"
+    assert any("Do not edit by hand" in line for line in lines[1:5])
