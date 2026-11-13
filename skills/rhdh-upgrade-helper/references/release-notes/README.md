@@ -1,46 +1,39 @@
 # Release notes
 
-One text file per RHDH release, extracted from the official Red Hat documentation.
+One file per RHDH release, generated from the official Red Hat documentation.
 
 These are maintainer-managed files. Users of the skill do not need any tools to use them. The skill reads local files only.
 
 ## File naming
 
-`{major}.{minor}.md`, for example `1.9.md` or `1.10.md`.
+`{major}.{minor}.md`, for example `2.1.md`.
 
-## How to add a new release
+## How files are produced
 
-Add the release to `../releases.json` first, in ascending order, with its upstream Backstage version and Node.js major version. Then add `{major}.{minor}.md` here. The resolver (`scripts/resolve-release.py`) and its tests read the manifest: a release note without a manifest entry is invisible to the skill, and a manifest entry without a note fails the test suite.
-
-Pick whichever method works for you. For RHDH 2.1, use the `whats_new` release-notes page linked in `2.1.md`; the older `html-single` URL pattern is not used for 2.1.
-
-### Option A: lynx and Claude (recommended)
+`scripts/generate-release-notes.py` fetches the published release-notes pages and writes the bundled markdown. It reads the release-notes landing page, follows every section link, and emits the eight required sections, so a new release or a renamed section needs no code change. The same run updates `../releases.json` for the releases it generates; the resolver (`scripts/resolve-release.py`) and its tests read that manifest, so a release note without a manifest entry is invisible to the skill.
 
 ```bash
-# Install lynx (one-time): brew install lynx / dnf install lynx / apt install lynx
-lynx -dump -nolist \
-  "https://docs.redhat.com/en/documentation/red_hat_developer_hub/{X.Y}/html-single/red_hat_developer_hub_release_notes/index" \
-  > raw.txt
+uv sync --extra release-notes
+uv run python skills/rhdh-upgrade-helper/scripts/generate-release-notes.py --release 2.1
+uv run python skills/rhdh-upgrade-helper/scripts/generate-release-notes.py --all
+uv run python skills/rhdh-upgrade-helper/scripts/generate-release-notes.py --all --check
 ```
 
-Then ask Claude to convert it:
+`.github/workflows/release-notes.yml` runs `--all` every Monday and opens a PR when the official notes change. Review the diff and merge; do not edit generated files by hand.
 
-```
-Convert raw.txt to a release notes markdown file matching the format in
-skills/rhdh-upgrade-helper/references/release-notes/1.10.md
-```
+### Why the extra dependency
 
-Claude strips the navigation boilerplate and structures it into the required sections.
+`docs.redhat.com` returns HTTP 403 to `lynx`, `curl`, and headless browsers. The generator uses `curl_cffi` Chrome TLS impersonation, which is why it lives behind the optional `release-notes` extra instead of the stdlib-only default install. If the fetch starts failing, the scheduled workflow fails loudly and the bundled files stay usable.
 
-### Option B: paste from browser and Claude
+## Legacy releases
 
-Open the single-page release notes URL in your browser, select all, copy, and paste into `raw.txt`. Then ask Claude to convert it as above.
+`1.4`–`1.10` were hand-curated from the single-page documentation and are intentionally frozen; that layout parses differently. Keep them as-is unless a correctness fix is needed.
 
-### Option C: PDF and Claude
+## Manual fallback
 
-Download the PDF from docs.redhat.com and convert with `pdftotext -layout file.pdf raw.txt`. Then ask Claude to convert it as above.
+If automation is unavailable, open the release-notes page in a browser, copy the section text into a scratch file, and ask an agent to convert it into the format of an existing file. Keep the section headings below exactly.
 
-### Required sections
+## Required sections
 
 Keep these sections in each file:
 
@@ -55,6 +48,6 @@ Keep these sections in each file:
 
 ## How the skill uses these files
 
-`workflows/full-report.md` Step 4c reads the release notes files listed in `$RELEASE_CONTEXT.release_range`, which comes from `../releases.json`. For example, `--from 1.8 --to 1.10` reads `1.9.md` and `1.10.md` to gather all breaking changes and new features across the skipped releases. The existing skip-version behavior is unchanged for a 2.1 target; review the skip-path assumption in `../migration-2.1.md` with the team.
+`workflows/full-report.md` Step 4c reads the release notes files listed in `$RELEASE_CONTEXT.release_range`, which comes from `../releases.json`. For example, `--from 1.8 --to 1.10` reads `1.9.md` and `1.10.md` to gather all breaking changes and new features across the skipped releases. Step 4.5c also maps each "Known issues" entry onto the customer's configured and pre-installed plugins. The existing skip-version behavior is unchanged for a 2.1 target; review the skip-path assumption in `../migration-2.1.md` with the team.
 
-A target version outside the manifest halts before intake (see `workflows/full-report.md` Step 0). If a file is missing for a manifest version, the report treats it as an incomplete skill install, attempts a `lynx` fetch, and otherwise points users to reinstall the skill.
+A target version outside the manifest halts before intake (see `workflows/full-report.md` Step 0). If a file is missing for a manifest version, the report runs the generator for 2.x or attempts a `lynx` fetch for 1.x, and otherwise points users to reinstall the skill.
