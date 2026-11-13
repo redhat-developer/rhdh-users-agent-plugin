@@ -11,6 +11,9 @@ permissions:
 
 jobs:
   refresh:
+    # Scheduled refreshes only belong to the canonical repository. Forks can still
+    # dispatch manually, and need no secrets of their own.
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'redhat-developer/rhdh-users-agent-plugin'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
