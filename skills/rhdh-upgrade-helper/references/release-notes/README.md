@@ -21,6 +21,15 @@ uv run python skills/rhdh-upgrade-helper/scripts/generate-release-notes.py --all
 
 `.github/workflows/release-notes.yml` runs `--all` every Monday and opens a PR when the official notes change. Review the diff and merge; do not edit generated files by hand.
 
+### Repository settings for the scheduled workflow
+
+The workflow pushes a branch and opens a PR with `GITHUB_TOKEN`, so both settings below are needed. Both are off by default:
+
+- Settings → Actions → General → Workflow permissions: **Read and write**.
+- Same page: **Allow GitHub Actions to create and approve pull requests**. Organisations often block this, and a repository cannot override the organisation policy.
+
+If the organisation blocks PR creation, add a fine-grained personal access token with `contents: write` and `pull-requests: write` for this repository as a `RELEASE_NOTES_TOKEN` secret. The workflow prefers it over `GITHUB_TOKEN`, and the PR is then opened by the token owner instead of `github-actions[bot]`.
+
 ### Why the extra dependency
 
 `docs.redhat.com` returns HTTP 403 to `lynx`, `curl`, and headless browsers. The generator uses `curl_cffi` Chrome TLS impersonation, which is why it lives behind the optional `release-notes` extra instead of the stdlib-only default install. If the fetch starts failing, the scheduled workflow fails loudly and the bundled files stay usable.
