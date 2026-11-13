@@ -40,6 +40,8 @@ None of this applies to forks. GitHub disables scheduled workflows in forks by d
 
 `1.4`–`1.10` were hand-curated from the single-page documentation and are intentionally frozen; that layout parses differently. Keep them as-is unless a correctness fix is needed.
 
+The generator refuses 1.x versions with an error instead of writing an empty file, because those pages keep the chapters outside the `<article>` element.
+
 ## Manual fallback
 
 If automation is unavailable, open the release-notes page in a browser, copy the section text into a scratch file, and ask an agent to convert it into the format of an existing file. Keep the section headings below exactly.

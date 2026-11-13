@@ -5,6 +5,8 @@ docs.redhat.com rejects lynx, curl, and headless browsers with HTTP 403, so the
 fetch uses curl_cffi's Chrome TLS impersonation (install with
 `uv sync --extra release-notes`). Parsing uses only the standard library.
 
+Only 2.x and later are generated; 1.x pages use a different layout and are curated by hand.
+
 Usage:
     generate-release-notes.py --release 2.1
     generate-release-notes.py --all
@@ -20,6 +22,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 DOCS_URL = "https://docs.redhat.com/en/documentation/red_hat_developer_hub"
+SUPPORTED_MIN_MAJOR = 2
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "references" / "release-notes"
 
 SECTIONS = (
@@ -279,6 +282,18 @@ def generate(version: str, docs_url: str, output_dir: Path, check: bool) -> bool
     return True
 
 
+def ensure_supported(version: str) -> None:
+    """Reject 1.x: those pages carry the chapters outside <article>, so nothing would parse."""
+    if int(version.split(".")[0]) < SUPPORTED_MIN_MAJOR:
+        print(
+            f"error: {version}: 1.x release notes come from the older single-page layout and "
+            "are curated by hand. This generator covers 2.x and later; see "
+            "references/release-notes/README.md.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -296,6 +311,8 @@ def main(argv: list[str] | None = None) -> int:
         versions += discover_versions(fetch(args.docs_url), args.min_major)
     if not versions:
         parser.error("pass --release X.Y or --all")
+    for version in versions:
+        ensure_supported(version)
 
     changed = False
     for version in dict.fromkeys(versions):

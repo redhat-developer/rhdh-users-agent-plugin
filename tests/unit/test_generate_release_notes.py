@@ -109,6 +109,21 @@ def stub_curl_cffi(monkeypatch, *, status: int = 200, html: str = "") -> None:
     monkeypatch.setitem(sys.modules, "curl_cffi", module)
 
 
+def test_rejects_1x_without_fetching(generator, monkeypatch, capsys):
+    def explode(*args, **kwargs):
+        raise AssertionError("must not fetch 1.x pages")
+
+    module = types.ModuleType("curl_cffi")
+    module.requests = types.SimpleNamespace(get=explode)
+    monkeypatch.setitem(sys.modules, "curl_cffi", module)
+
+    with pytest.raises(SystemExit) as exc:
+        generator["main"](["--release", "1.10"])
+
+    assert exc.value.code == 2
+    assert "1.x" in capsys.readouterr().err
+
+
 def test_fetch_accepts_product_page_without_article(generator, monkeypatch):
     html = read("product-page.html")
     stub_curl_cffi(monkeypatch, html=html)
