@@ -10,14 +10,13 @@ Read these references before proceeding:
 - [Upstream migration guide](https://github.com/redhat-developer/rhdh-chart/blob/release-2.1/charts/rhdh/docs/migration-from-backstage-chart.md) — authoritative mapping tables, behavioral changes, chart-managed defaults inventory, before/after YAML examples
 - `references/chart-migration-1y-2y.md` — ambiguous area transformation algorithms, `.Values.*` rewriting rules, decomposed fields (skill-specific metadata not in the upstream guide)
 - `references/secrets-detection.md` — secret scanning patterns
-- For target 2.1, `references/migration-2.1.md` — product changes that apply to all deployment methods
+- The target's `migration_reference` from `$RELEASE_CONTEXT` (currently `references/migration-2.1.md`) — product changes that apply to all deployment methods
 - `references/output-format.md` — report template (for the final combined report)
 </required_reading>
 
 ## Step 0: Validate prerequisites
 
-1. Confirm this is a major version upgrade: the RHDH major version in `--from` differs
-   from `--to` (e.g., 1.10 → 2.1).
+1. Use `$RELEASE_CONTEXT` from the release resolution step in `SKILL.md` / `workflows/full-report.md` Step 0. Confirm `is_major_upgrade` is true and `to.chart_migration` is true; otherwise stop and route to `workflows/full-report.md`. Versions are already normalized.
 2. Note the prerequisite: Kubernetes 1.32+ / OpenShift 4.19+.
 3. For 2.1, an in-place `helm upgrade` is supported; uninstalling the 1.y release is not required.
 4. Identify the Helm values file to migrate. Sources (in priority order):
@@ -33,7 +32,7 @@ or export from a running release: `helm get values <release> -n <ns> -o yaml > o
 ## Step 1: Secrets scan
 
 Before any processing, scan the values file for embedded secrets per
-`references/secrets-detection.md`. Same rules as `workflows/full-report.md` Step 0.
+`references/secrets-detection.md`. Same rules as `workflows/full-report.md` Step 0a.
 
 ## Chart version resolution
 
@@ -268,8 +267,8 @@ Regardless of whether ambiguous areas existed, warn about behavioral changes:
 
 After chart migration, always run `workflows/full-report.md` with the **migrated**
 values file(s) as input (alongside any other config files the user provided, such as
-app-config.yaml or dynamic-plugins.yaml). For target 2.1, the full report must also load
-`references/migration-2.1.md`; this product guidance applies to Helm and non-Helm deployments.
+app-config.yaml or dynamic-plugins.yaml). The full report must also load the target's
+`migration_reference` from `$RELEASE_CONTEXT` (currently `references/migration-2.1.md`); this product guidance applies to Helm and non-Helm deployments.
 This combines the chart migration actions with the full release guidance.
 
 The migrated values file contains plugin config, auth settings, and other fields the

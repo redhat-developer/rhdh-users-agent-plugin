@@ -27,6 +27,7 @@ Analyzes your RHDH configuration against a target release and produces a persona
 - Filters breaking changes into "Affects You" vs "Does NOT Affect You"
 - Computes a 0-100 Readiness Score with transparent breakdown
 - Includes bundled release notes for RHDH 1.4–1.10 and 2.1, with a deployment-agnostic 2.1 migration reference
+- Resolves the target release before reading configuration and stops with update guidance when the version is outside its bundled release data
 
 See [rhdh-upgrade-helper](./skills/rhdh-upgrade-helper/SKILL.md) for the full skill definition.
 

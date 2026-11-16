@@ -7,6 +7,7 @@
 ### Generated: {date} | Backstage: {bs_from} → {bs_target} | Environment source: {Config files | Intake answers}
 
 > **Readiness:** {score}/100 — {Ready | Ready with prep | Significant prep needed | Major migration | Extensive migration}
+> **Provisional:** {N} scoring categories were not assessed; the score excludes them. (only when scoring gaps exist)
 > **Config changes required:** {N} ({critical_count} critical, {high_count} important)
 > **Estimated effort:** {effort_label}
 
@@ -80,7 +81,7 @@ If no relevant issues were found, display: "No known bugs found for your plugin 
 ### What Changed in RHDH {target_version}
 
 **Backstage:** {bs_from} → {bs_target} ({N} minor versions)
-**Node.js:** {node_from} → {node_target}
+**Node.js:** {node_from} → {node_target} (major versions)
 
 #### New Features Available to You
 - {feature} — {one-line description}
@@ -144,6 +145,9 @@ Post-upgrade:
 
 ## Rules
 
+- **Use the requested versions in the title.** Show `1.10.4` when the customer asked for `1.10.4`, even though notes and scoring use the normalized `1.10`. Backstage and Node.js values come from `$RELEASE_CONTEXT` / `references/releases.json`.
+- **Report scoring gaps.** When `$RELEASE_CONTEXT.gaps` is non-empty, include the Provisional line and list each affected category as `Not assessed — {category}: {reason}` in the breakdown. Never present an unassessed category as a 0 deduction.
+- **Unknown source values.** When `from.known` is false, print `unknown` for `{bs_from}` and `{node_from}` in the header and "What Changed" section instead of omitting the fields.
 - **No internal jargon.** Write for a platform team running RHDH, not a Red Hat support engineer.
 - **Concrete over generic.** "Update line 42 of `dynamic-plugins.yaml`" not "Update your plugin configuration."
 - **Always include "Does NOT Affect You."** Even if empty ("All breaking changes in this release apply to your setup"), this section reduces upgrade anxiety.

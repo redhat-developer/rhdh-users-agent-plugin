@@ -6,13 +6,15 @@ Explain the rhdh-upgrade-helper skill to the user. No data sources needed.
 
 **rhdh-upgrade-helper** analyzes your RHDH configuration against a target release and produces a personalized migration plan — showing exactly what affects your setup and what doesn't.
 
+Before analysis, it resolves the target release against its bundled release data. An unknown version stops immediately with the known releases and update instructions.
+
 ### What it does
 
 1. **Scans for secrets** — checks config files for embedded API keys, passwords, and tokens before processing
 2. **Analyzes your environment** — reads your config files or asks about your setup to understand your plugins, auth providers, SCM, and features
 3. **Resolves OCI references** — looks up each plugin in your config against the shipped catalog-index metadata to determine if local-path references need OCI migration, with overlay Git fallback
 4. **Validates existing OCI plugins** — checks that your `oci://` references are still valid and up-to-date for the target release
-5. **Checks release notes** — reads bundled release notes (1.4–1.10) for breaking changes, deprecated features, removed features, and known issues
+5. **Checks release notes** — reads bundled release notes (1.4–1.10 and 2.1) for breaking changes, deprecated features, removed features, and known issues
 6. **Searches for known bugs** — queries RHDHBUGS Jira per-plugin for open bugs affecting your specific plugin versions, plus GitHub Issues for community-reported upgrade issues
 7. **Filters what affects YOU** — classifies every breaking change as "Affects You" or "Does NOT Affect You" based on your actual configuration
 8. **Generates a migration plan** — prioritized by severity (Critical → fix before upgrade, Important → fix after, Informational → nice to know)
@@ -85,8 +87,8 @@ Surfaces all breaking changes across skipped releases (1.9 and 1.10 in this exam
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `--to X.Y` | Yes | Target RHDH version to upgrade TO |
-| `--from X.Y` | No | Source RHDH version upgrading FROM. Defaults to the release immediately before `--to` |
+| `--to X.Y[.Z]` | Yes | Target RHDH version to upgrade TO. `X.Y.Z` is normalized to `X.Y`; the exact version is kept in the report header |
+| `--from X.Y[.Z]` | No | Source RHDH version upgrading FROM. Defaults to the previous bundled release. `X.Y.Z` is normalized to `X.Y` |
 | `--config /path/to/file` | No | Individual config file path. Repeatable |
 | `--config-path /dir` | No | Directory to scan for config files |
 
@@ -138,6 +140,7 @@ For **rhdh-local**, just point `--config-path` at the rhdh-local directory — e
 - Does not predict issues from ticket history
 - Does not verify runtime behavior — test with RHDH Local for that
 - Does not construct OCI references that don't exist in workspace metadata — only recommends what's verified
+- Does not assess a target release outside its bundled release data — it stops and tells you to update the skill
 
 ### Prerequisites
 
@@ -147,13 +150,26 @@ For **rhdh-local**, just point `--config-path` at the rhdh-local directory — e
 | `git` | Fallback | Shallow clone of the overlay repo for reduced-fidelity plugin metadata | Product context is limited to overlay files; report labels it as fallback evidence |
 | `gh` CLI (authenticated) | Recommended | GitHub Issues search | Bug search skipped if unavailable |
 | Atlassian MCP (Jira) | Optional | Per-plugin bug search against RHDHBUGS | Skipped silently — report uses release notes + GitHub Issues only |
-| `lynx` | Optional | Auto-fetch missing release notes | Notes the gap with a link to official docs |
+| `lynx` | Optional | Auto-fetch missing release notes | Notes the incomplete skill install and links the official docs |
 
 The skill degrades gracefully — the catalog-index image is preferred, but the core analysis can continue with the overlay Git fallback. If neither an image tool nor Git is available, plugin-support and OCI-migration conclusions are reported as unavailable rather than inferred.
 
-### Bundled release notes
+### Version coverage
 
-Includes RHDH 1.4 through 1.10. Missing versions auto-fetched via `lynx` if available.
+The skill ships an offline release manifest (`references/releases.json`) and knows RHDH 1.4–1.10 and 2.1.
+
+- `--to` must be one of those releases. An unknown version stops before reading your configuration and lists the known releases.
+- If the requested release is newer than the manifest, the skill tells you to update it:
+
+  ```
+  npx skills add redhat-developer/rhdh-users-agent-plugin --skill rhdh-upgrade-helper
+  ```
+
+  Plugin-aware clients can update through their Plugin UI instead.
+- `--from` may be older than the bundled range. The assessment continues, but version-jump and FROM-dependent checks are marked "Not assessed" and the readiness score is labeled provisional.
+- `X.Y.Z` is accepted and normalized to `X.Y`; the exact version you asked for still appears in the report header.
+
+Bundled notes for a known release are expected to be present. If one is missing, the skill attempts a `lynx` fetch and otherwise tells you to reinstall.
 
 ### Support
 

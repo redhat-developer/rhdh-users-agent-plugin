@@ -17,10 +17,10 @@ Invoke with:
 - Skip-release:     `/rhdh-upgrade-helper --from 1.8 --to 1.10 --config ./values.yaml`
 - Chart migration:  `/rhdh-upgrade-helper --from 1.10 --to 2.1 --config ./values.yaml`
 
-Arguments: `[--to X.Y] [--from X.Y] [--config /path/to/file] [--config-path /dir]`
+Arguments: `[--to X.Y[.Z]] [--from X.Y[.Z]] [--config /path/to/file] [--config-path /dir]`
 
-- **--to X.Y** (required): Target RHDH release version to upgrade TO.
-- **--from X.Y** (optional): Source RHDH release version upgrading FROM. Defaults to the release immediately before `--to`. Use when skipping releases (e.g., `--from 1.8 --to 1.10`).
+- **--to X.Y[.Z]** (required): Target RHDH release version to upgrade TO. Resolved against `references/releases.json` before any intake; an unknown target halts. `X.Y.Z` is normalized to `X.Y`, while the exact version is kept in the report header.
+- **--from X.Y[.Z]** (optional): Source RHDH release version upgrading FROM. Defaults to the previous bundled release. Use when skipping releases (e.g., `--from 1.8 --to 1.10`). A source outside the bundled range is allowed and reported as a gap.
 - **--config /path/to/file** (optional, repeatable): Path to an individual config file. Can be specified multiple times. Accepts `values.yaml`, `app-config.yaml`, `dynamic-plugins.yaml`, Backstage CR, or any YAML with RHDH configuration. File type is auto-detected from content.
 - **--config-path /dir** (optional): Path to a directory to scan for config files. When provided, scans for known file patterns. Can be combined with `--config` for additional files.
 - When no config source is given, the skill checks for `.rhdh-upgrade-helper.yaml` in the current directory. If not found, it asks intake questions to build your environment profile. See `references/rhdh-upgrade-helper-config.md`.
@@ -55,15 +55,16 @@ All config files are scanned for embedded secrets before processing. See `refere
 <routing>
 | Condition | Workflow |
 |-----------|----------|
-| Target is RHDH 2.1 and Helm values are present | `workflows/chart-migration.md`, then `workflows/full-report.md` with `references/migration-2.1.md` |
-| Target is RHDH 2.1 without Helm values | `workflows/full-report.md` with `references/migration-2.1.md`; use interactive intake if config files are absent |
+| Target has `to.chart_migration: true` and Helm values are present | `workflows/chart-migration.md`, then `workflows/full-report.md` with the target's `migration_reference` |
+| Target has a `to.migration_reference` without Helm values | `workflows/full-report.md` with that reference; use interactive intake if config files are absent |
 | Other major version upgrade with Helm values | `workflows/chart-migration.md` (chart values migration + upgrade assessment) |
 | Config files resolved (via `.rhdh-upgrade-helper.yaml`, `--config`, or `--config-path`) | `workflows/full-report.md` (config-driven assessment) |
 | No config files resolved | `workflows/interactive.md` (ask intake questions, then assess) |
 | "help", "explain", "how" | `workflows/help.md` |
 
-**`--to` is always required.** If omitted, prompt for it before routing. `.rhdh-upgrade-helper.yaml` may provide it.
-**RHDH 2.1 routing:** Always load `references/migration-2.1.md` for a 1.x → 2.1 assessment, regardless of deployment method. If Helm values are present, run `workflows/chart-migration.md` first and then the full assessment; otherwise use `workflows/full-report.md` (or interactive intake when no config files are available). For other major upgrades with Helm values, use the chart workflow before the full assessment. Preserve the existing `--from` and skip-version behavior.
+**Resolve versions first.** Run `scripts/resolve-release.py` before routing, as specified in `workflows/full-report.md` Step 0. An unknown `--to` halts there with the known releases and update guidance; do not ask intake questions or read configuration first. The `chart_migration` and `migration_reference` fields come from `references/releases.json`; currently only 2.1 sets both.
+**`--to` is always required.** If omitted, prompt for it, then rerun the resolver. `.rhdh-upgrade-helper.yaml` may provide it.
+**Version-specific routing:** Load the target's `migration_reference` for every assessment against that release, regardless of deployment method. If `chart_migration` is true and Helm values are present, run `workflows/chart-migration.md` first and then the full assessment; otherwise use `workflows/full-report.md` (or interactive intake when no config files are available). For other major upgrades with Helm values, use the chart workflow before the full assessment. Preserve the existing `--from` and skip-version behavior.
 **When no config files are resolved, always route to `workflows/interactive.md` — never produce a generic report without gathering environment context first.**
 </routing>
 
@@ -82,6 +83,7 @@ All config files are scanned for embedded secrets before processing. See `refere
 | `references/rhdh-architecture.md` | RHDH architecture context — what actually breaks on upgrade vs. common false positives. |
 | `references/chart-migration-1y-2y.md` | Chart values migration tables for 1.y→2.y: deterministic mappings, ambiguous areas, behavioral changes, removed/new values. |
 | `references/migration-2.1.md` | RHDH 2.1 product migration checks for all deployment methods; load for every 1.x→2.1 assessment. |
+| `references/releases.json` | Offline release manifest: release order, Backstage and Node.js versions, and version-specific `migration_reference`/`chart_migration` flags. |
 | `references/release-notes/{X.Y}.md` | Per-release notes (new features, breaking changes, deprecated/removed features, known issues). One file per release. |
 </reference_index>
 
@@ -120,6 +122,10 @@ This skill is customer-facing. Avoid: "Customer Focal," "RHDHSUPP," "ticket hist
 **Use the Package entity's `spec.dynamicArtifact` as the artifact source of truth.** A generally available plugin may intentionally remain bundled at a local path, so do not replace it with the `registryReference` from `index.json`. A community plugin may intentionally use a GHCR tag in `spec.dynamicArtifact`, so use that exact reference instead of a registry-access image from `index.json`. For a GA `registry.access.redhat.com` artifact with a matching default OCI entry, recommend the 1.10 `:{{inherit}}` form so the default dynamic-plugin tag is inherited. The index image data is enrichment and lookup evidence, not a replacement for `spec.dynamicArtifact`. See `references/config-analysis.md` Section 1.
 </pitfall>
 
+<pitfall name="unknown-release">
+**Resolve `--to` against `references/releases.json` before intake.** Never proceed with an unlisted target, and never present "failed to clone the overlay repo" as the user's error. Halt in Step 0 with the known release list and update guidance. An unknown `--from` is different: continue, but mark version-jump and FROM-dependent checks "Not assessed" rather than scoring them as 0.
+</pitfall>
+
 <pitfall name="processing-secrets">
 Never process literal secret values. Before analyzing any config file, scan for patterns defined in `references/secrets-detection.md`. If embedded secrets are detected, warn the user with file and line numbers and ask them to redact before continuing. Template variable references (`${VAR_NAME}`, `{{ .Values.x }}`) are NOT secrets — do not flag them. If the user chooses to continue despite warnings, replace detected secret values with `[REDACTED]` in all report output.
 </pitfall>
@@ -129,15 +135,17 @@ Always recommend RHDH Local for safe pre-upgrade testing. If the customer's work
 </pitfall>
 
 <pitfall name="findings-without-evidence">
-**Never flag a finding as Critical or Important without concrete evidence from the RHDH release notes (`references/release-notes/*.md`), the shipped catalog-index metadata (or explicitly labeled overlay fallback), or Backstage changelogs.** Do not infer deprecation or breakage from naming conventions alone (e.g., "legacy" does not mean deprecated). Every Critical or Important finding must trace to a specific release notes entry or metadata change. If no evidence exists, either omit the finding or note it as Informational with an explicit caveat.
+**Never flag a product-change finding as Critical or Important without concrete evidence from the RHDH release notes (`references/release-notes/*.md`), the shipped catalog-index metadata (or explicitly labeled overlay fallback), or Backstage changelogs.** Do not infer deprecation or breakage from naming conventions alone (e.g., "legacy" does not mean deprecated). Every Critical or Important product finding must trace to a specific release notes entry or metadata change. If no evidence exists, either omit the finding or note it as Informational with an explicit caveat. This rule does not suppress config-derived findings: an unresolved artifact or invalid config key keeps its severity because its `file:line` and target metadata are the evidence.
 </pitfall>
 </anti_patterns>
 
 <success_criteria>
 The report is complete when:
 
+- Target release resolved against `references/releases.json` before intake; unknown targets halted
+- Source release gaps (`from_version_unknown`) carried into the report and shown as "Not assessed"
 - All config files scanned for secrets per `references/secrets-detection.md` before any analysis
-- Target release resolved to Backstage version via the shipped catalog-index image or explicitly labeled overlay fallback
+- Target release's Backstage and Node.js versions resolved from `references/releases.json`; plugin metadata from the shipped catalog-index image or explicitly labeled overlay fallback
 - Customer's environment determined (from config or intake questions)
 - Product context gathered for the release range
 - Per-plugin bug search run against RHDHBUGS Jira (if accessible) and `redhat-developer/rhdh` GitHub Issues
@@ -147,6 +155,6 @@ The report is complete when:
 - "Does NOT Affect You" section included to reduce upgrade anxiety
 - RHDH Local recommended for pre-upgrade testing per `references/rhdh-local.md`
 - Upgrade checklist provided at end of report
-- For RHDH 2.1: `references/migration-2.1.md` was applied to the customer's environment for any deployment method
+- For a target with a `migration_reference` (currently 2.1): that reference was applied to the customer's environment for any deployment method
 - For major Helm upgrades: chart values migration completed via `workflows/chart-migration.md`, all ambiguous areas resolved with user confirmation, migrated values file validated with `helm template`
 </success_criteria>

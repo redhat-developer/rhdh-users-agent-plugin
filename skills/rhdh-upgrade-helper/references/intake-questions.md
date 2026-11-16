@@ -12,7 +12,9 @@ Ask in this order. Config files are asked EARLY because they provide auth, SCM, 
 
 Map to: `environment.current_version`. If they say "1.8" and `--to` is `1.10`, this means a skip-release upgrade — flag it.
 
-If `--from` was already provided in arguments, skip this question and use that value.
+If `--from` was already provided in arguments, skip this question and use that value. If the answer differs from the resolved source, rerun the resolver from `workflows/interactive.md` Step 1 with `--from {answer}`. It accepts `X.Y` and `X.Y.Z`.
+
+If the answer names a release outside the bundled range, continue with `from.known: false`. The full report marks version-jump and FROM-dependent checks "Not assessed"; it does not halt.
 
 ### Q2: Deployment Method (required)
 
