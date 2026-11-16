@@ -338,3 +338,80 @@ def test_bundled_notes_put_the_do_not_edit_notice_first():
 
     assert lines[0] == "# RHDH 2.1 Release Notes"
     assert any("Do not edit by hand" in line for line in lines[1:5])
+
+
+def article_with(body: str, title: str = "Auth") -> str:
+    return f'<article role="article"><h1>Notes</h1><h2>{title}</h2>{body}</article>'
+
+
+def test_inline_code_is_rendered_with_backticks(generator):
+    html = article_with(
+        "<p>Configure it under "
+        '<code class="ph codeph">auth.providers.&lt;id&gt;</code> and set '
+        '<code class="ph codeph">enabled: true</code> in '
+        '<code class="ph codeph">dynamic-plugins.yaml</code>.</p>'
+    )
+
+    _, _, items, _ = generator["parse_article"](html)
+    bullet = generator["render_item"](items[0], "removed_features")
+
+    assert bullet == (
+        "- **Auth**: Configure it under `auth.providers.<id>` and set "
+        "`enabled: true` in `dynamic-plugins.yaml`."
+    )
+
+
+def test_inline_code_in_title_is_rendered(generator):
+    html = article_with(
+        "<p>Use it.</p>", title='The <code class="ph codeph">enabled</code> setting'
+    )
+
+    _, _, items, _ = generator["parse_article"](html)
+    bullet = generator["render_item"](items[0], "removed_features")
+
+    assert bullet.startswith("- **The `enabled` setting**")
+
+
+def test_inline_code_contents_are_not_markdown_escaped(generator):
+    html = article_with(
+        '<p>Set <code class="ph codeph">foo_bar</code> and <code class="ph codeph">a*b</code>.</p>'
+    )
+
+    _, _, items, _ = generator["parse_article"](html)
+    bullet = generator["render_item"](items[0], "removed_features")
+
+    assert "`foo_bar`" in bullet
+    assert "`a*b`" in bullet
+    assert "\\_" not in bullet
+    assert "\\*" not in bullet
+
+
+def test_pre_code_blocks_are_still_dropped(generator):
+    html = article_with(
+        "<p>Before</p><pre><code>scorecard:\n  plugins: []</code></pre><p>After</p>"
+    )
+
+    _, _, items, _ = generator["parse_article"](html)
+
+    assert items[0]["paragraphs"] == ["Before", "After"]
+
+
+def test_limit_body_never_leaves_an_unclosed_code_span(generator):
+    text = "word " * 89 + generator["CODE_OPEN"] + "x" * 120 + generator["CODE_CLOSE"] + " tail"
+
+    cut = generator["limit_body"](text, 500)
+
+    assert cut.count(generator["CODE_OPEN"]) == cut.count(generator["CODE_CLOSE"]) == 0
+    assert cut.endswith("…")
+
+
+def test_legacy_variablelist_preserves_inline_code(generator):
+    html = (
+        '<div class="variablelist" id="auth">'
+        '<span class="term">Use <code class="ph codeph">auth.providers</code></span>'
+        '<dd><p>Set <code class="ph codeph">enabled: true</code>.</p></dd></div>'
+    )
+
+    rendered = generator["render_legacy_section"](html, "removed_features")
+
+    assert rendered == "- **Use `auth.providers`**: Set `enabled: true`."
