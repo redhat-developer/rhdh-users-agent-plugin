@@ -14,7 +14,7 @@ configs:
   - ./backstage-cr.yaml
 ```
 
-- `from` and `release` are optional — CLI args (`--from`, `--to`) take precedence
+- `from` and `release` (or `to`) are optional — CLI args (`--from`, `--to`) take precedence
 - `configs` is a list of file paths, relative to the `.rhdh-upgrade-helper.yaml` file location
 - File type is auto-detected from content, not filename — see "File Type Auto-Detection" below
 

@@ -10,6 +10,8 @@ These are maintainer-managed files. Users of the skill do not need any tools to 
 
 ## How to add a new release
 
+Add the release to `../releases.json` first, in ascending order, with its upstream Backstage version and Node.js major version. Then add `{major}.{minor}.md` here. The resolver (`scripts/resolve-release.py`) and its tests read the manifest: a release note without a manifest entry is invisible to the skill, and a manifest entry without a note fails the test suite.
+
 Pick whichever method works for you. For RHDH 2.1, use the `whats_new` release-notes page linked in `2.1.md`; the older `html-single` URL pattern is not used for 2.1.
 
 ### Option A: lynx and Claude (recommended)
@@ -53,6 +55,6 @@ Keep these sections in each file:
 
 ## How the skill uses these files
 
-`workflows/full-report.md` Step 4c reads the release notes files for every release in the FROM→TO range. For example, `--from 1.8 --to 1.10` reads `1.9.md` and `1.10.md` to gather all breaking changes and new features across the skipped releases. The existing skip-version behavior is unchanged for a 2.1 target; review the skip-path assumption in `../migration-2.1.md` with the team.
+`workflows/full-report.md` Step 4c reads the release notes files listed in `$RELEASE_CONTEXT.release_range`, which comes from `../releases.json`. For example, `--from 1.8 --to 1.10` reads `1.9.md` and `1.10.md` to gather all breaking changes and new features across the skipped releases. The existing skip-version behavior is unchanged for a 2.1 target; review the skip-path assumption in `../migration-2.1.md` with the team.
 
-If a file is missing for a version in the range, the report notes the gap and points users to the official docs URL.
+A target version outside the manifest halts before intake (see `workflows/full-report.md` Step 0). If a file is missing for a manifest version, the report treats it as an incomplete skill install, attempts a `lynx` fetch, and otherwise points users to reinstall the skill.

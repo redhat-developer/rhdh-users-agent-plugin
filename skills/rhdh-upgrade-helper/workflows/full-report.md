@@ -10,11 +10,40 @@ Read these references before proceeding:
 - `references/rhdh-local.md` — RHDH Local detection and recommendation
 - `references/env-vars.md` — known RHDH environment variables
 - `references/config-analysis.md` — how to parse config files
+- `references/releases.json` — offline release manifest, read through `scripts/resolve-release.py`
 - `references/rhdh-architecture.md` — what actually breaks vs. false positives
-- For target 2.1, `references/migration-2.1.md` — product migration checks for Helm, Operator, and RHDH Local deployments
+- For a target with a `to.migration_reference` (currently `references/migration-2.1.md`) — product migration checks for Helm, Operator, and RHDH Local deployments
 </required_reading>
 
-## Step 0: Secrets Scan (MUST run before any analysis)
+## Step 0: Resolve Release Versions (MUST run before intake)
+
+Resolve the target and source releases against the bundled manifest before asking intake questions or reading configuration files. This is the fail-fast check: an unknown target stops here.
+
+Extract `rhdh_to` and `rhdh_from_release` from `--to`/`--from` first. If neither flag is present, read only the `release` (or `to`) and `from` keys from `.rhdh-upgrade-helper.yaml` — the same source Step 1a uses. Do not read any other config file yet.
+
+```bash
+if [ -n "{rhdh_from_release}" ]; then
+  RELEASE_CONTEXT=$(python3 "$SKILL_DIR/scripts/resolve-release.py" \
+    --to "{rhdh_to}" --from "{rhdh_from_release}" --json)
+else
+  RELEASE_CONTEXT=$(python3 "$SKILL_DIR/scripts/resolve-release.py" \
+    --to "{rhdh_to}" --json)
+fi
+```
+
+Run the same command without `--json` for a human-readable summary. Handle the exit code:
+
+- `0` — resolved. Keep `$RELEASE_CONTEXT` for Steps 2, 4c, 5, and 6.
+- `2` — unknown target. Show the `message` field verbatim and halt. Do not ask intake questions or read config files.
+- `4` — `--from` is not older than `--to`. Show the message and halt.
+- `1` — malformed or missing version. Show the message and ask for `--to X.Y` / `--from X.Y`, then rerun this step.
+- `3` — `references/releases.json` is missing or invalid. Tell the user the skill install is incomplete and to reinstall it. Halt.
+
+The resolver accepts `X.Y` and `X.Y.Z`, normalizes to `X.Y` for notes, catalog extraction, and scoring, and preserves the requested string for the report header. It supplies `release_range` (the notes files to load), `backstage_minor_jump`, `node_major_jump`, `is_major_upgrade`, `migration_reference`, `chart_migration`, and `gaps`.
+
+If `from.known` is `false`, continue: the target assessment is still valid. Carry `from_version_unknown` into the report, mark version-jump and FROM-dependent checks "Not assessed" per `references/config-scoring.md`, and note that readiness is provisional.
+
+## Step 0a: Secrets Scan (MUST run before any analysis)
 
 Before processing any config files, scan ALL resolved config files for embedded secrets following `references/secrets-detection.md`.
 
@@ -48,14 +77,14 @@ If found, extract:
 
 - `configs` list → add each path to the resolved file list (resolve relative paths from the `.rhdh-upgrade-helper.yaml` location)
 - `from` → use as `rhdh_from_release` if `--from` not in CLI args
-- `release` → use as `rhdh_to` if `--to` not in CLI args
+- `release` (or `to`) → use as `rhdh_to` if `--to` not in CLI args
 
 ### 1b: Process CLI arguments
 
 Extract from $ARGUMENTS:
 
 - `rhdh_to`: from `--to X.Y` (overrides `.rhdh-upgrade-helper.yaml`)
-- `rhdh_from_release`: from `--from X.Y` (overrides `.rhdh-upgrade-helper.yaml`), defaults to release immediately before `--to`
+- `rhdh_from_release`: from `--from X.Y` (overrides `.rhdh-upgrade-helper.yaml`), defaults to the previous release in `references/releases.json`
 - `--config /path/to/file`: add each file to the resolved file list (may appear multiple times)
 - `--config-path /dir`: if provided and no `.rhdh-upgrade-helper.yaml` found, scan directory for config files per `references/config-analysis.md` File Discovery
 
@@ -72,7 +101,8 @@ Skip this confirmation only when the files came from a `.rhdh-upgrade-helper.yam
 
 ### 1d: Validate
 
-- `--to` is required (from CLI or `.rhdh-upgrade-helper.yaml`). If missing, prompt: "What RHDH version are you upgrading to? (e.g., --to 1.10)"
+- `--to` is required (from CLI or `.rhdh-upgrade-helper.yaml`). If Step 0 reports a missing target, prompt: "What RHDH version are you upgrading to? (e.g., --to 1.10)", then rerun Step 0.
+- Version syntax and coverage were already validated in Step 0; do not re-validate here.
 - If config files were resolved from any source, proceed with config-driven analysis
 - If `$ENVIRONMENT_PROFILE` was passed from `workflows/interactive.md`, use that instead of config files
 - If no config files and no environment profile, route to `workflows/interactive.md`
@@ -102,33 +132,31 @@ RELEASE_VERSIONS=$(python3 "$SKILL_DIR/scripts/parse-catalog-index.py" \
   --data-root "$PRODUCT_DATA_ROOT" versions "{rhdh_to}" --json)
 ```
 
-If extraction fails completely, report the product-data gap and do not silently make plugin-support or OCI-migration claims. The source (FROM) release does not need product-data extraction — its Backstage/Node versions come from the bundled release notes (`references/release-notes/{from}.md`).
+If extraction fails completely, report the product-data gap and do not silently make plugin-support or OCI-migration claims. The source (FROM) release does not need product-data extraction — its Backstage/Node versions come from `$RELEASE_CONTEXT` (Step 0) and the bundled manifest (`references/releases.json`). Do not parse prose release notes for versions.
 
-Read version info:
+Read version info from `$RELEASE_CONTEXT` resolved in Step 0:
+
+- `to.backstage`, `to.node_major`
+- `from.backstage`, `from.node_major` (null when `from.known` is false)
+- `backstage_minor_jump`, `node_major_jump`, `is_major_upgrade`
 
 ```bash
-# Target release (TO) — from the extracted catalog data:
 echo "$RELEASE_VERSIONS"
-
-# Source release (FROM) — from bundled release notes:
-# e.g., references/release-notes/1.8.md says "upstream Backstage 1.42.5"
+echo "$RELEASE_CONTEXT"
 ```
+
+Optionally cross-check `$RELEASE_VERSIONS` from the extracted catalog data. If it disagrees with the manifest, prefer the manifest and note the discrepancy in `$PRODUCT_CONTEXT`.
 
 **Major version handling (e.g., 1.x → 2.x):**
 
-- If the target is 2.1, read `references/migration-2.1.md` and correlate its checks with the customer's configuration regardless of deployment method. If Helm values are present, also run the chart migration workflow.
+- If `$RELEASE_CONTEXT.to.migration_reference` is set, read that reference and correlate its checks with the customer's configuration regardless of deployment method. Currently only 2.1 sets it.
+- If `$RELEASE_CONTEXT.to.chart_migration` is true and Helm values are present, also run the chart migration workflow.
 - Preserve the existing FROM/TO and skipped-release behavior. The 2.1 migration reference records the unresolved skip-path assumption for team review.
-- If the major version differs between FROM and TO, flag this as a **major version upgrade** in the report header
+- If `$RELEASE_CONTEXT.is_major_upgrade` is true, flag this as a **major version upgrade** in the report header
 - Major version upgrades may introduce fundamental architecture changes (e.g., frontend system migration, backend system migration) — surface these prominently
-- If no branch exists for the target version yet (e.g., `2.0` before release), inform the user: "RHDH {version} has not been released yet. The overlay repo does not have a branch for this version. Try a released version."
+- An unknown target has already halted in Step 0. Do not continue past this step for an unrecognized release.
 
-Extract `backstage` and `node` versions from both. Compute:
-
-- `backstage_version_jump`: minor version difference
-- `node_version_jump`: major version difference
-- `is_major_upgrade`: true if the RHDH major version differs
-
-Capture as `$RELEASE_CONTEXT`.
+`$RELEASE_CONTEXT` already contains `backstage_minor_jump`, `node_major_jump`, and `is_major_upgrade`. Do not recompute them from prose. When `from.known` is `false`, those values are `null` and the corresponding score rows are "Not assessed".
 
 ## Step 3: Analyze Customer Environment (parallel with Step 4)
 
@@ -147,7 +175,7 @@ Also scan `--config-path` for `.env`, `.env.local`, or `env.sh` files. If found,
 
 - Env vars deprecated or renamed between the FROM and TO releases
 - `APP_CONFIG_*` overrides that conflict with the target version's defaults
-- Apply secrets detection (Step 0) to `.env` file values before processing
+- Apply secrets detection (Step 0a) to `.env` file values before processing
 
 ### If `$ENVIRONMENT_PROFILE` provided (from interactive intake)
 
@@ -193,11 +221,7 @@ For catalog-index data, the Package entity is authoritative for `spec.packageNam
 
 ### 4c: Release notes
 
-For every release in the FROM→TO range (excluding FROM — the customer is already on it), load the release notes:
-
-```
-For --from 1.8 --to 1.10, load 1.9.md and 1.10.md
-```
+Load the release notes for every version in `$RELEASE_CONTEXT.release_range` (the range excludes FROM — the customer is already on it). For `--from 1.8 --to 1.10`, the range is `["1.9", "1.10"]`.
 
 **For each version in the range:**
 
@@ -228,7 +252,7 @@ Then convert the raw text to a structured markdown file matching the format of e
 
 For 2.1, use `references/release-notes/2.1.md` and `references/migration-2.1.md` as the curated source. Save any other fetched result to `references/release-notes/{version}.md` so future runs skip the fetch.
 
-4. **If lynx is not available or the fetch fails:** Note the gap in the report: "Release notes for RHDH {version} could not be fetched automatically. Install lynx (`brew install lynx` / `dnf install lynx` / `apt install lynx`) or manually add the file per `references/release-notes/README.md`. For 2.1, use <https://docs.redhat.com/en/documentation/red_hat_developer_hub/2.1/whats_new-red_hat_developer_hub_release_notes>; for other versions, check <https://docs.redhat.com/en/documentation/red_hat_developer_hub/{version}>."
+4. **If lynx is not available or the fetch fails:** The release is listed in `references/releases.json`, so a missing bundled file means this skill install is incomplete. Note the gap in the report: "Bundled release notes for RHDH {version} are missing from this skill install, and the automatic fetch failed. Reinstall the skill (`npx skills add redhat-developer/rhdh-users-agent-plugin --skill rhdh-upgrade-helper`) or add `references/release-notes/{version}.md`. Release-note findings for this version are unavailable." For 2.1, use <https://docs.redhat.com/en/documentation/red_hat_developer_hub/2.1/whats_new-red_hat_developer_hub_release_notes>; for other versions, check <https://docs.redhat.com/en/documentation/red_hat_developer_hub/{version}>."
 
 ### 4d: Build plugin metadata index and resolve all plugin references
 
@@ -355,6 +379,8 @@ Each finding gets a severity. Use `references/migration-2.1.md` for target 2.1 a
 - **Important:** Degraded experience if not fixed soon after upgrade (deprecated API, changed default, version mismatch)
 - **Informational:** Awareness only (new feature available, minor deprecation with no immediate impact). For 2.1, `disabled`→`enabled` is Informational, must mention the announced deprecation and later-release migration, and does not reduce readiness.
 
+The evidence rule in `SKILL.md` applies to product-change claims. A finding derived from the customer's own config — for example an unresolved `spec.dynamicArtifact` — keeps its severity because the config location and target metadata are its evidence. An unknown source release limits FROM-dependent product claims, not config findings.
+
 ## Step 6: Compute Readiness Score
 
 Follow `references/config-scoring.md` exactly:
@@ -366,6 +392,8 @@ Follow `references/config-scoring.md` exactly:
 5. Map to readiness label
 
 Every deduction must trace to a specific finding from Steps 3-5.
+
+If `$RELEASE_CONTEXT.gaps` is non-empty, mark the affected categories "Not assessed" per `references/config-scoring.md` and add the provisional-score note. Do not treat a missing input as a 0 deduction.
 
 ## Step 7: Compile Report
 
