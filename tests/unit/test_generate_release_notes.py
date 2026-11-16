@@ -1,5 +1,6 @@
 """Offline tests for the release-notes generator."""
 
+import json
 import re
 import runpy
 import sys
@@ -415,3 +416,98 @@ def test_legacy_variablelist_preserves_inline_code(generator):
     rendered = generator["render_legacy_section"](html, "removed_features")
 
     assert rendered == "- **Use `auth.providers`**: Set `enabled: true`."
+
+
+def test_upsert_manifest_adds_release_and_preserves_manual_fields(generator):
+    manifest = {
+        "schema": 1,
+        "releases": [
+            {
+                "version": "2.1",
+                "backstage": "1.54.9",
+                "node_major": 24,
+                "chart_migration": True,
+                "migration_reference": "references/migration-2.1.md",
+            }
+        ],
+    }
+
+    updated = generator["upsert_manifest"](manifest, "2.2", "1.60.2", None)
+    entries = {entry["version"]: entry for entry in updated["releases"]}
+
+    assert list(entries) == ["2.1", "2.2"]
+    assert entries["2.1"]["chart_migration"] is True
+    assert entries["2.1"]["migration_reference"] == "references/migration-2.1.md"
+    assert entries["2.2"] == {
+        "version": "2.2",
+        "backstage": "1.60.2",
+        "node_major": None,
+    }
+
+
+def test_upsert_manifest_preserves_a_known_node_major(generator):
+    manifest = {"releases": [{"version": "2.1", "backstage": "1.54.9", "node_major": 24}]}
+
+    updated = generator["upsert_manifest"](manifest, "2.1", "1.54.9", None)
+
+    assert updated["releases"][0]["node_major"] == 24
+
+
+def test_landing_versions_reads_backstage_and_optional_node(generator):
+    html = (
+        '<article role="article"><p>Red Hat Developer Hub 2.2 is generally available. '
+        "It is a fully supported, enterprise-grade productized version of upstream "
+        "Backstage 1.60.2 and uses Node.js 24.21.0.</p></article>"
+    )
+
+    assert generator["landing_versions"](html) == ("1.60.2", 24)
+
+
+def test_landing_versions_allows_a_missing_node_version(generator):
+    html = (
+        '<article role="article"><p>It is a fully supported, enterprise-grade '
+        "productized version of upstream Backstage 1.60.2.</p></article>"
+    )
+
+    assert generator["landing_versions"](html) == ("1.60.2", None)
+
+
+def test_generate_updates_notes_and_manifest(generator, monkeypatch, tmp_path):
+    landing = (
+        '<html><main><article role="article"><p>Red Hat Developer Hub 2.2 is generally '
+        "available. It is a fully supported, enterprise-grade productized version of "
+        "upstream Backstage 1.60.2 and uses Node.js 24.21.0.</p>"
+        "<h2>One issue</h2><p>Details.</p>"
+        '<a href="/2.2/whats_new-known_issues">Known issues</a>'
+        "</article></main></html>"
+    )
+    stub_curl_cffi(monkeypatch, html=landing)
+    manifest = tmp_path / "releases.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "releases": [
+                    {
+                        "version": "2.1",
+                        "backstage": "1.54.9",
+                        "node_major": 24,
+                        "chart_migration": True,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    notes = tmp_path / "notes"
+
+    changed = generator["generate"]("2.2", "https://example.invalid", notes, False, manifest)
+
+    assert changed
+    assert (notes / "2.2.md").is_file()
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    entries = {entry["version"]: entry for entry in data["releases"]}
+    assert list(entries) == ["2.1", "2.2"]
+    assert entries["2.1"]["chart_migration"] is True
+    assert entries["2.2"]["backstage"] == "1.60.2"
+    assert entries["2.2"]["node_major"] == 24

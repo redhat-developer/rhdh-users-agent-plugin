@@ -18,7 +18,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import copy
 import html
+import json
 import re
 import sys
 import unicodedata
@@ -31,6 +33,7 @@ SUPPORTED_MIN_MAJOR = 2
 LANDING_SLUG = "red_hat_developer_hub_release_notes"
 LEGACY_ALIASES = {"developer_preview_features": "developer_preview"}
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "references" / "release-notes"
+DEFAULT_MANIFEST = Path(__file__).resolve().parents[1] / "references" / "releases.json"
 MAX_PAGE_BYTES = 5 * 1024 * 1024
 VERSION_RE = re.compile(r"\d+\.\d+")
 MARKDOWN_SPECIAL_RE = re.compile(r"([\\`*_\[\]{}|~])")
@@ -476,8 +479,63 @@ def fetch(url: str) -> str:
     return body
 
 
-def generate(version: str, docs_url: str, output_dir: Path, check: bool) -> bool:
-    """Generate one release file. Return True when the file changed."""
+def load_manifest(path: Path = DEFAULT_MANIFEST) -> dict:
+    """Read the release manifest, creating an empty one when it does not exist."""
+    if not path.exists():
+        return {"schema": 1, "releases": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise FetchError(f"cannot read release manifest {path}: {exc}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("releases"), list):
+        raise FetchError(f"release manifest is invalid: {path}")
+    return data
+
+
+def landing_versions(landing_html: str) -> tuple[str, int | None]:
+    """Read the upstream Backstage version and, when stated, the Node.js major."""
+    _, intro, _, _ = parse_article(landing_html)
+    text = " ".join(intro)
+    backstage = re.search(r"upstream Backstage (\d+\.\d+(?:\.\d+)?)", text)
+    if not backstage:
+        raise FetchError(
+            "could not find an upstream Backstage version on the release-notes landing page"
+        )
+    node = re.search(r"Node\.js (\d+)", text)
+    return backstage.group(1), int(node.group(1)) if node else None
+
+
+def upsert_manifest(manifest: dict, version: str, backstage: str, node_major: int | None) -> dict:
+    """Add or update one release while preserving manual fields and known Node majors."""
+    releases = manifest.setdefault("releases", [])
+    for item in releases:
+        if not isinstance(item, dict) or not VERSION_RE.fullmatch(str(item.get("version", ""))):
+            raise FetchError(f"release manifest contains an invalid entry: {item!r}")
+    entry = next((item for item in releases if item.get("version") == version), None)
+    if entry is None:
+        entry = {"version": version}
+        releases.append(entry)
+    entry["backstage"] = backstage
+    entry.setdefault("node_major", node_major)
+    releases.sort(key=lambda item: tuple(int(part) for part in str(item["version"]).split(".")))
+    return manifest
+
+
+def write_manifest(manifest: dict, path: Path = DEFAULT_MANIFEST) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def generate(
+    version: str,
+    docs_url: str,
+    output_dir: Path,
+    check: bool,
+    manifest_path: Path = DEFAULT_MANIFEST,
+) -> bool:
+    """Generate one release file and update the manifest. Return True when anything changed."""
     if not VERSION_RE.fullmatch(version):
         raise ValueError(f"invalid release version: {version!r}; expected X.Y")
     legacy = int(version.split(".")[0]) < SUPPORTED_MIN_MAJOR
@@ -519,18 +577,32 @@ def generate(version: str, docs_url: str, output_dir: Path, check: bool) -> bool
     content = build_release(version, landing_url, landing_html, sections)
     target = output_dir / f"{version}.md"
     current = target.read_text(encoding="utf-8") if target.exists() else None
-    if current == content:
+
+    manifest = load_manifest(manifest_path)
+    before = copy.deepcopy(manifest)
+    backstage, node_major = landing_versions(landing_html)
+    manifest = upsert_manifest(manifest, version, backstage, node_major)
+    manifest_changed = manifest != before
+    notes_changed = current != content
+
+    if not notes_changed and not manifest_changed:
         print(f"{version}: up to date")
         return False
     if check:
         print(f"{version}: out of date ({target})", file=sys.stderr)
         return True
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_suffix(".md.tmp")
-    tmp.write_text(content, encoding="utf-8")
-    tmp.replace(target)
-    print(f"{version}: wrote {target}")
+    written = []
+    if notes_changed:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(".md.tmp")
+        tmp.write_text(content, encoding="utf-8")
+        tmp.replace(target)
+        written.append(str(target))
+    if manifest_changed:
+        write_manifest(manifest, manifest_path)
+        written.append(str(manifest_path))
+    print(f"{version}: wrote {', '.join(written)}")
     return True
 
 

@@ -87,7 +87,7 @@ An upgrade assessment does not install dependencies or fetch missing release not
 | `references/rhdh-architecture.md` | RHDH architecture context — what actually breaks on upgrade vs. common false positives. |
 | `references/chart-migration-1y-2y.md` | Chart values migration tables for 1.y→2.y: deterministic mappings, ambiguous areas, behavioral changes, removed/new values. |
 | `references/migration-2.1.md` | RHDH 2.1 product migration checks for all deployment methods; load for every 1.x→2.1 assessment. |
-| `references/releases.json` | Offline release manifest: release order, Backstage and Node.js versions, and version-specific `migration_reference`/`chart_migration` flags. |
+| `references/releases.json` | Offline release manifest: release order, Backstage and Node.js versions, and version-specific `migration_reference`/`chart_migration` flags. The release-notes generator updates it for the releases it processes. |
 | `references/release-notes/{X.Y}.md` | Per-release notes (new features, breaking changes, deprecated/removed features, known issues). One file per release. |
 </reference_index>
 

@@ -2,6 +2,8 @@
 
 import json
 import re
+import runpy
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -186,3 +188,68 @@ def test_help_states_version_coverage_and_update_path():
         "npx skills add redhat-developer/rhdh-users-agent-plugin --skill rhdh-upgrade-helper"
         in help_text
     )
+
+
+def test_manifest_allows_a_null_node_major(tmp_path):
+    manifest = tmp_path / "releases.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "releases": [
+                    {"version": "2.1", "backstage": "1.54.9", "node_major": None},
+                    {"version": "2.2", "backstage": "1.60.2", "node_major": 24},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    resolver = runpy.run_path(str(SCRIPT))
+    records = resolver["load_manifest"](manifest)
+
+    assert records[0]["node_major"] is None
+    assert records[1]["node_major"] == 24
+
+
+def test_missing_node_version_is_reported_as_a_gap(tmp_path):
+    skill = tmp_path / "skill"
+    (skill / "scripts").mkdir(parents=True)
+    (skill / "references" / "release-notes").mkdir(parents=True)
+    shutil.copy(SCRIPT, skill / "scripts" / "resolve-release.py")
+    (skill / "references" / "releases.json").write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "releases": [
+                    {"version": "2.1", "backstage": "1.54.9", "node_major": 24},
+                    {"version": "2.2", "backstage": "1.60.2", "node_major": None},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    for version in ("2.1", "2.2"):
+        (skill / "references" / "release-notes" / f"{version}.md").write_text(
+            "# notes\n", encoding="utf-8"
+        )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(skill / "scripts" / "resolve-release.py"),
+            "--to",
+            "2.2",
+            "--from",
+            "2.1",
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["node_major_jump"] is None
+    assert "node_version_unknown" in data["gaps"]

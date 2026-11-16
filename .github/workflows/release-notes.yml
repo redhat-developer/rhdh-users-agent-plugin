@@ -43,11 +43,12 @@ jobs:
         run: |
           # git diff ignores untracked files, and a newly published release is a new file.
           notes="skills/rhdh-upgrade-helper/references/release-notes"
-          if [ -z "$(git status --porcelain -- "$notes")" ]; then
+          manifest="skills/rhdh-upgrade-helper/references/releases.json"
+          if [ -z "$(git status --porcelain -- "$notes" "$manifest")" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            git status --short -- "$notes"
+            git status --short -- "$notes" "$manifest"
           fi
 
       - name: Open pull request
@@ -59,16 +60,17 @@ jobs:
           gh auth setup-git
           branch="bot/release-notes"
           notes="skills/rhdh-upgrade-helper/references/release-notes"
+          manifest="skills/rhdh-upgrade-helper/references/releases.json"
           title="docs(rhdh-upgrade-helper): refresh RHDH release notes"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A -- "$notes"
+          git add -A -- "$notes" "$manifest"
 
           # Skip the whole step when the reusable branch already proposes this content.
           if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
             git fetch --no-tags origin "$branch:refs/remotes/origin/$branch"
-            if git diff --quiet --cached "refs/remotes/origin/$branch" -- "$notes"; then
+            if git diff --quiet --cached "refs/remotes/origin/$branch" -- "$notes" "$manifest"; then
               echo "::notice::$branch already carries these notes; nothing to propose."
               exit 0
             fi
