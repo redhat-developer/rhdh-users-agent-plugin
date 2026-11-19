@@ -54,7 +54,7 @@ jobs:
       - name: Open pull request
         if: steps.diff.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_NOTES_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           gh auth setup-git
@@ -107,7 +107,7 @@ jobs:
           fi
 
           if ! url=$(gh pr create --base main --head "$branch" --title "$title" --body-file /tmp/pr-body.md); then
-            echo "::error::Could not open the pull request. Enable 'Allow GitHub Actions to create and approve pull requests' under Settings > Actions > General > Workflow permissions, or add a RELEASE_NOTES_TOKEN secret with contents: write and pull-requests: write."
+            echo "::error::Could not open the pull request. Enable 'Allow GitHub Actions to create and approve pull requests' under Settings > Actions > General > Workflow permissions."
             exit 1
           fi
 

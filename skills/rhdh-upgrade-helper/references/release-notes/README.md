@@ -28,8 +28,7 @@ Run this workflow only from a maintainer checkout. The installed skill must neve
 The scheduled workflow has write access and runs third-party code, so keep these controls in place:
 
 - Pin every GitHub Action used by this workflow to a full commit SHA, not a mutable tag.
-- Do not persist checkout credentials. Prefer the default checkout token and pass any `RELEASE_NOTES_TOKEN` only to the final PR step.
-- Prefer the repository `GITHUB_TOKEN`; when that is not possible, use a dedicated fine-grained token limited to `contents: write` and `pull-requests: write` for this repository.
+- Do not persist checkout credentials. Pass only the job's `GITHUB_TOKEN` to the final PR step as `GH_TOKEN`, and do not add a personal access token secret. `GITHUB_TOKEN` is created per job, limited to this repository by the workflow's `permissions:` block (`contents: write`, `pull-requests: write`), and expires with the job; a long-lived PAT only adds blast radius.
 - Protect `main` with required pull requests and Code Owner review, block force pushes and deletion, and dismiss stale approvals whenever new commits are pushed. The bot reuses its PR branch, so stale-approval dismissal is mandatory.
 - Never bypass these protections for the automation token.
 
@@ -42,9 +41,11 @@ The workflow pushes a branch and opens a PR with `GITHUB_TOKEN`, so both setting
 - Settings → Actions → General → Workflow permissions: **Read and write**.
 - Same page: **Allow GitHub Actions to create and approve pull requests**. Organisations often block this, and a repository cannot override the organisation policy.
 
-If the organisation blocks PR creation, add a fine-grained personal access token with `contents: write` and `pull-requests: write` for this repository as a `RELEASE_NOTES_TOKEN` secret. The workflow prefers it over `GITHUB_TOKEN`, and the PR is then opened by the token owner instead of `github-actions[bot]`.
+A pull request opened with `GITHUB_TOKEN` starts its `pull_request` workflows in an approval-required state: a user with write access selects **Approve workflows to run** in the merge box before CI executes.
 
-None of this applies to forks. GitHub disables scheduled workflows in forks by default, and the job also refuses to run on a schedule outside the canonical repository. A manual dispatch still runs there, which is how the workflow is tested before merging: it regenerates the files, and stops at the PR step unless the fork allows Actions to create pull requests or defines `RELEASE_NOTES_TOKEN`.
+If the organisation blocks PR creation, an organisation admin has to enable it; there is no token workaround. Until then, a run still pushes `bot/release-notes` and then fails at the PR step, so open the pull request by hand from that branch.
+
+None of this applies to forks. GitHub disables scheduled workflows in forks by default, and the job also refuses to run on a schedule outside the canonical repository. A manual dispatch still runs there, which is how the workflow is tested before merging: it regenerates the files, and stops at the PR step unless the fork allows Actions to create pull requests.
 
 ### Why the extra dependency
 

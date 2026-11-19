@@ -314,6 +314,8 @@ def test_release_notes_workflow_pins_actions_and_checkout_credentials():
     assert all(re.search(r"@[0-9a-f]{40}$", action) for action in actions)
     assert "persist-credentials: false" in workflow
     assert "select(.isCrossRepository == false)" in workflow
+    assert "RELEASE_NOTES_TOKEN" not in workflow
+    assert "secrets.GITHUB_TOKEN" in workflow
 
 
 def test_generated_output_satisfies_release_note_section_contract(generator):
