@@ -73,8 +73,9 @@ def load_manifest(path: Path = MANIFEST) -> list[dict]:
         try:
             parsed = parse_version(str(item["version"]))
             backstage = str(item["backstage"])
-            node_major = int(item["node_major"])
-        except (KeyError, TypeError, ValueError) as exc:
+            raw_node = item.get("node_major")
+            node_major = int(raw_node) if raw_node is not None else None
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
             raise ResolveError(
                 3,
                 {
@@ -335,8 +336,14 @@ def resolve(to_raw: str | None, from_raw: str | None) -> dict:
             backstage_jump = target_bs[1] - source_bs[1]
 
     node_jump = None
-    if source_info["known"] and source_info["node_major"] is not None:
+    if (
+        source_info["known"]
+        and source_info["node_major"] is not None
+        and target_info["node_major"] is not None
+    ):
         node_jump = target_info["node_major"] - source_info["node_major"]
+    if source_info["known"] and node_jump is None:
+        gaps.append("node_version_unknown")
 
     if source_info["known"]:
         start = records.index(source) + 1
@@ -368,13 +375,17 @@ def print_human(result: dict) -> None:
     )
     print(f"Target: RHDH {target['version']}{requested}")
     print(
-        f"  Backstage {target['backstage']} | Node.js {target['node_major']} "
+        f"  Backstage {target['backstage']} | "
+        f"Node.js {target['node_major'] if target['node_major'] is not None else 'unknown'} "
         f"| notes: {target['notes']}"
     )
     if source["known"]:
         label = "default" if result["default_from"] else "requested"
         print(f"Source: RHDH {source['version']} ({label})")
-        print(f"  Backstage {source['backstage']} | Node.js {source['node_major']}")
+        print(
+            f"  Backstage {source['backstage']} | "
+            f"Node.js {source['node_major'] if source['node_major'] is not None else 'unknown'}"
+        )
     else:
         label = "default" if result["default_from"] else "requested"
         print(f"Source: RHDH {source['requested']} ({label}, no bundled data)")

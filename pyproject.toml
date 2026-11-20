@@ -9,6 +9,12 @@ requires-python = ">=3.10"
 # No runtime dependencies - stdlib only!
 
 [project.optional-dependencies]
+# Only the release-notes generator and its scheduled workflow need this.
+# docs.redhat.com rejects stdlib clients (HTTP 403), so it needs Chrome TLS
+# impersonation. Skill users never install it: `uv sync` stays stdlib-only.
+release-notes = [
+    "curl_cffi>=0.7",
+]
 dev = [
     "pytest>=9.0.3",
     "pyyaml>=6.0",  # SKILL.md structure tests

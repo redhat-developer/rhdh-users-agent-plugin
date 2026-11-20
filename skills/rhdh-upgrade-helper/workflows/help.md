@@ -133,6 +133,8 @@ For **rhdh-local**, just point `--config-path` at the rhdh-local directory — e
 - If secrets are detected, you're warned and asked to continue or redact first
 - Detected secrets are replaced with `[REDACTED]` in all report output
 - The skill does not modify, store, or transmit your configuration files
+- Release notes are treated as external source data; embedded instructions are not followed
+- Assessments do not install tools, fetch release notes, or run the release-notes generator
 
 ### What it does NOT do
 
@@ -150,7 +152,6 @@ For **rhdh-local**, just point `--config-path` at the rhdh-local directory — e
 | `git` | Fallback | Shallow clone of the overlay repo for reduced-fidelity plugin metadata | Product context is limited to overlay files; report labels it as fallback evidence |
 | `gh` CLI (authenticated) | Recommended | GitHub Issues search | Bug search skipped if unavailable |
 | Atlassian MCP (Jira) | Optional | Per-plugin bug search against RHDHBUGS | Skipped silently — report uses release notes + GitHub Issues only |
-| `lynx` | Optional | Auto-fetch missing release notes | Notes the incomplete skill install and links the official docs |
 
 The skill degrades gracefully — the catalog-index image is preferred, but the core analysis can continue with the overlay Git fallback. If neither an image tool nor Git is available, plugin-support and OCI-migration conclusions are reported as unavailable rather than inferred.
 
@@ -169,7 +170,7 @@ The skill ships an offline release manifest (`references/releases.json`) and kno
 - `--from` may be older than the bundled range. The assessment continues, but version-jump and FROM-dependent checks are marked "Not assessed" and the readiness score is labeled provisional.
 - `X.Y.Z` is accepted and normalized to `X.Y`; the exact version you asked for still appears in the report header.
 
-Bundled notes for a known release are expected to be present. If one is missing, the skill attempts a `lynx` fetch and otherwise tells you to reinstall.
+Bundled notes for a known release are expected to be present. If one is missing, the skill reports the gap and points to the official documentation; it does not fetch notes or install tools during an assessment (maintainers regenerate them separately).
 
 ### Support
 
