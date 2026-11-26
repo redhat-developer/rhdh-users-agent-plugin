@@ -169,7 +169,7 @@ Yes. See [CONTRIBUTING.md](./CONTRIBUTING.md). Proposed skills should help RHDH 
 ### Where do I get help?
 
 - RHDH product documentation: [Red Hat Developer Hub](https://docs.redhat.com/en/documentation/red_hat_developer_hub)
-- Issues and feature requests: [JIRA (RHIDP)](https://issues.redhat.com/browse/RHIDP)
+- Bugs should be created in the [RHDHBUGS Jira](https://redhat.atlassian.net/jira/software/c/projects/RHDHBUGS/boards/5367).
 
 ## Development
 
